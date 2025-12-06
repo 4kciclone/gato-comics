@@ -1,0 +1,6 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/leitor/[mangaId]/[chapterId]/page": "app/leitor/[mangaId]/[chapterId]/page.js",
+  "/obra/[id]/page": "app/obra/[id]/page.js",
+  "/page": "app/page.js"
+}

@@ -1,0 +1,333 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- ENUMS ---
+
+enum Role {
+  USER
+  UPLOADER
+  ADMIN
+  OWNER
+}
+
+enum PlanTier {
+  FREE
+  BRONZE
+  PRATA
+  OURO
+  PLATINA
+}
+
+enum TransactionType {
+  PURCHASE_PACK      // Comprou patinhas com R$
+  SPENT_CHAPTER      // Gastou lendo
+  SPENT_SHOP         // Gastou comprando cosmético
+  SUBSCRIPTION_BONUS // Ganhou do plano
+  ADMIN_ADJUSTMENT   // Suporte adicionou
+}
+
+enum UnlockType {
+  PERMANENT
+  RENTAL_AD
+  SUBSCRIPTION
+}
+
+enum ReadingStatus {
+  LENDO
+  LEREI
+  COMPLETO
+  DROPADO
+  NENHUM
+}
+
+
+enum ItemType {
+  BANNER       // Fundo do perfil/comentário
+  FRAME        // Borda do avatar
+  TITLE_EFFECT // Efeito colorido no nome
+}
+
+// --- USUÁRIOS E PERFIL ---
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  fullName      String?
+  avatarUrl     String?
+  role          Role      @default(USER)
+  
+  // Carteira
+  patinhasBalance Int     @default(0)
+  
+  // Relacionamentos
+  subscription  Subscription?
+  unlocks       Unlock[]
+  transactions  Transaction[]
+  comments      Comment[]
+  
+  // Inventário de Cosméticos
+  inventory     UserItem[]
+  
+  // Configs rápidas (JSON)
+  customization Json?     @default("{}") 
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+   library       UserLibrary[] 
+
+  @@map("users")
+}
+
+// --- LOJA DE COSMÉTICOS ---
+
+model ShopItem {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        ItemType
+  price       Int      // Preço em Patinhas
+  
+  // Visual (Pode ser URL de imagem ou CSS/JSON gerado na forja)
+  previewUrl  String?  
+  cssClass    String?  
+  isAnimated  Boolean  @default(false)
+  
+  users       UserItem[] // Quem comprou
+  
+  createdAt   DateTime @default(now())
+
+  @@map("shop_items")
+}
+
+model UserItem {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  itemId      String
+  item        ShopItem @relation(fields: [itemId], references: [id])
+  
+  isEquipped  Boolean  @default(false)
+  acquiredAt  DateTime @default(now())
+
+  @@map("user_items")
+}
+
+// --- ASSINATURAS ---
+
+model Subscription {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id])
+  
+  status    String   @default("ACTIVE")
+  startDate DateTime @default(now())
+  endDate   DateTime
+  
+  selections SubscriptionSelection[]
+
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+model SubscriptionSelection {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  workId         String
+  work           Work         @relation(fields: [workId], references: [id])
+  selectedAt     DateTime     @default(now())
+
+  @@unique([subscriptionId, workId])
+  @@map("subscription_selections")
+}
+
+model Plan {
+  id              String   @id @default(uuid())
+  name            String
+  tier            PlanTier @unique
+  price           Decimal  @db.Decimal(10, 2)
+  monthlyPatinhas Int
+  maxWorksSelect  Int
+  storeDiscount   Int
+  
+  subscriptions   Subscription[]
+
+  @@map("plans")
+}
+
+// --- OBRAS E CONTEÚDO ---
+
+model Work {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  description String   @db.Text
+  coverUrl    String
+  bannerUrl   String?
+  
+  author      String
+  artist      String?
+  status      String   @default("ONGOING")
+  tags        String[]
+  
+  // Analytics
+  views       Int      @default(0)
+  rating      Decimal  @default(0) @db.Decimal(3, 2)
+  
+  // Relacionamentos
+  chapters    Chapter[]
+  selections  SubscriptionSelection[]
+  viewHistory WorkView[]
+  comments    Comment[] // <--- ADICIONADO (Correção do erro anterior)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userLibraries UserLibrary[]
+
+  @@map("works")
+}
+
+model WorkView {
+  id        String   @id @default(uuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  viewedAt  DateTime @default(now())
+
+  @@index([workId, viewedAt])
+  @@map("work_views")
+}
+
+model Chapter {
+  id          String   @id @default(uuid())
+  workId      String
+  work        Work     @relation(fields: [workId], references: [id])
+  
+  number      Float
+  title       String?
+  price       Int      @default(1)
+  isFree      Boolean  @default(false)
+  pages       String[] 
+  
+  unlocks     Unlock[]
+  comments    Comment[]
+
+  createdAt   DateTime @default(now())
+
+  @@index([workId, number])
+  @@map("chapters")
+}
+
+model Unlock {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  chapterId String
+  chapter   Chapter    @relation(fields: [chapterId], references: [id])
+  
+  type      UnlockType
+  expiresAt DateTime?
+
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, chapterId])
+  @@map("unlocks")
+}
+
+// --- FINANCEIRO E SISTEMA ---
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  
+  type        TransactionType
+  amount      Int
+  description String?
+  referenceId String?
+
+  createdAt   DateTime        @default(now())
+
+  @@map("transactions")
+}
+
+model PatinhaPack {
+  id          String  @id @default(uuid())
+  name        String
+  patinhas    Int
+  bonus       Int     @default(0)
+  price       Decimal @db.Decimal(10, 2)
+  imageUrl    String?
+
+  @@map("patinha_packs")
+}
+
+// --- COMENTÁRIOS E COMUNIDADE ---
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
+  isSpoiler Boolean  @default(false)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // O comentário pode pertencer a um capítulo...
+  chapterId String?
+  chapter   Chapter? @relation(fields: [chapterId], references: [id])
+  
+  // ...OU pertencer à obra inteira (Discussão Geral)
+  workId    String?
+  work      Work?    @relation(fields: [workId], references: [id])
+
+  // Sistema de Respostas (Hierarquia)
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+
+  @@map("comments")
+}
+
+model UserLibrary {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  
+  status    ReadingStatus @default(NENHUM)
+  rating    Int?          // 1 a 5
+  isFavorite Boolean      @default(false)
+  
+  updatedAt DateTime      @default(now())
+
+  @@id([userId, workId]) // Chave composta: um registro por usuário/obra
+  @@map("user_libraries")
+}
+
+// --- CONFIGURAÇÕES GLOBAIS ---
+
+model SystemConfig {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}

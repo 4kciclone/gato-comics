@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///home/reaper/gato-comics/src/app/page.tsx"],"sourcesContent":["export default function Home() {\n  return (\n    <div className=\"min-h-screen flex flex-col items-center justify-center bg-gato-black text-white\">\n      <h1 className=\"text-4xl font-bold text-gato-purple animate-pulse\">\n        Gato Comics\n      </h1>\n      <p className=\"text-gato-muted mt-4\">\n        O sistema está carregando...\n      </p>\n    </div>\n  );\n}"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACtB,qBACE,8OAAC;QAAI,WAAU;;0BACb,8OAAC;gBAAG,WAAU;0BAAoD;;;;;;0BAGlE,8OAAC;gBAAE,WAAU;0BAAuB;;;;;;;;;;;;AAK1C"}}]
+}
