@@ -39,5 +39,7 @@ app.use('/api', router);
 // HEALTH CHECK
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-const PORT = 4000;
-app.listen(PORT, () => console.log(`🚀 API rodando na porta ${PORT}`));
+const PORT = process.env.PORT || 4000; 
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 API rodando na porta ${PORT}`);
+});
