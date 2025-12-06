@@ -52,7 +52,7 @@ export function MangaList() {
           <div className="flex items-center gap-3">
             <div className="w-1 h-6 md:h-8 bg-gato-purple rounded-full shadow-[0_0_10px_#8A2BE2]" />
             <h2 className="text-xl md:text-3xl font-bold text-white tracking-tight">
-              Lançamentos da <span className="text-gato-amber">Alcateia</span>
+              Lançamentos
             </h2>
           </div>
         </div>

@@ -127,7 +127,7 @@ function ShopContent() {
           Gato Store
         </span>
         <h1 className="text-4xl md:text-5xl font-extrabold text-white">
-          Mercado da <span className="text-transparent bg-clip-text bg-gradient-to-r from-gato-purple to-pink-600">Alcateia</span>
+          Mercado
         </h1>
       </div>
 
