@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Zap, ShieldCheck, Gem, Palette, Coins, ShoppingBag } from "lucide-react";
 import api from "@/lib/api";
 import { useUserStore } from "@/store/useUserStore";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer"; // <--- Importe aqui
+import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer";
 
 // --- TIPOS ---
 interface Pack {
@@ -27,18 +27,22 @@ interface ShopItem {
   description?: string;
 }
 
-export default function ShopPage() {
+// 1. COMPONENTE COM A LÓGICA DA LOJA (Child)
+function ShopContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, addPatinhas, patinhas } = useUserStore();
   
+  // Estados de Dados
   const [activeTab, setActiveTab] = useState<'packs' | 'cosmetics'>('packs');
   const [packs, setPacks] = useState<Pack[]>([]);
   const [cosmetics, setCosmetics] = useState<ShopItem[]>([]);
   
+  // Estados de UI
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState<string | null>(null);
 
+  // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     async function fetchData() {
       try {
@@ -57,6 +61,7 @@ export default function ShopPage() {
     fetchData();
   }, []);
 
+  // --- FEEDBACK DO STRIPE ---
   useEffect(() => {
     if (searchParams.get("success")) {
       alert("Pagamento confirmado! Suas patinhas foram adicionadas.");
@@ -68,6 +73,7 @@ export default function ShopPage() {
     }
   }, [searchParams, router]);
 
+  // --- AÇÃO: COMPRAR PACOTE (STRIPE) ---
   const handleBuyPack = async (pack: Pack) => {
     if (!isAuthenticated) return router.push("/login");
     setBuyingId(pack.id);
@@ -82,6 +88,7 @@ export default function ShopPage() {
     }
   };
 
+  // --- AÇÃO: COMPRAR COSMÉTICO (PATINHAS) ---
   const handleBuyCosmetic = async (item: ShopItem) => {
     if (!isAuthenticated) return router.push("/login");
     
@@ -109,12 +116,12 @@ export default function ShopPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-gato-black flex items-center justify-center"><Loader2 className="w-10 h-10 text-gato-amber animate-spin"/></div>;
+    return <div className="flex h-[50vh] items-center justify-center"><Loader2 className="w-10 h-10 text-gato-amber animate-spin"/></div>;
   }
 
   return (
-    <div className="min-h-screen bg-gato-black pb-20 pt-24 px-4">
-      
+    <>
+      {/* Header */}
       <div className="text-center max-w-2xl mx-auto mb-10 space-y-4">
         <span className="inline-block px-3 py-1 bg-gato-amber/10 text-gato-amber rounded-full text-xs font-bold uppercase tracking-widest border border-gato-amber/20">
           Gato Store
@@ -124,6 +131,7 @@ export default function ShopPage() {
         </h1>
       </div>
 
+      {/* SELETOR DE ABAS */}
       <div className="flex justify-center mb-12">
         <div className="bg-zinc-900/80 p-1.5 rounded-2xl border border-white/10 flex gap-2 backdrop-blur-sm">
           <button 
@@ -147,6 +155,7 @@ export default function ShopPage() {
 
       <AnimatePresence mode="wait">
         
+        {/* --- ABA 1: PACOTES DE PATINHAS --- */}
         {activeTab === 'packs' && (
           <motion.div 
             key="packs"
@@ -192,6 +201,7 @@ export default function ShopPage() {
           </motion.div>
         )}
 
+        {/* --- ABA 2: COSMÉTICOS --- */}
         {activeTab === 'cosmetics' && (
           <motion.div 
             key="cosmetics"
@@ -205,10 +215,8 @@ export default function ShopPage() {
                 {cosmetics.map((item) => (
                   <div key={item.id} className="bg-zinc-900/50 border border-white/5 p-4 rounded-xl flex flex-col items-center hover:bg-zinc-900 transition-colors">
                     
-                    {/* Visualização do Item */}
                     <div className="h-32 w-full flex items-center justify-center mb-4 bg-black/40 rounded-lg overflow-hidden relative border border-white/5">
                         <div className="relative flex items-center justify-center">
-                            {/* Renderizador de Cosmético para Preview */}
                             {item.type === 'FRAME' && (
                                 <div className="relative w-16 h-16">
                                     <div className="w-16 h-16 rounded-full bg-zinc-800" />
@@ -258,6 +266,21 @@ export default function ShopPage() {
             <span className="flex items-center gap-1"><Gem className="w-4 h-4"/> Entrega Automática</span>
         </div>
       </div>
+    </>
+  );
+}
+
+// 2. COMPONENTE PÁGINA (WRAPPER)
+export default function ShopPage() {
+  return (
+    <div className="min-h-screen bg-gato-black pb-20 pt-24 px-4">
+      <Suspense fallback={
+        <div className="flex h-screen items-center justify-center">
+          <Loader2 className="w-10 h-10 text-gato-amber animate-spin"/>
+        </div>
+      }>
+        <ShopContent />
+      </Suspense>
     </div>
   );
 }
