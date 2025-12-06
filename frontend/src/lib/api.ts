@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { useUserStore } from '@/store/useUserStore';
-
+const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 const api = axios.create({
-  baseURL: 'http://localhost:4000/api',
+  baseURL,
 });
 
 // Interceptor: Antes de cada requisição, pega o token da Store e coloca no Header
