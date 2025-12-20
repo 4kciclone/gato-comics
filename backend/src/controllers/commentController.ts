@@ -43,20 +43,27 @@ export class CommentController {
     }
   }
 
-  // 2. LISTAR COMENTÁRIOS (Hierárquico)
+  // 2. LISTAR COMENTÁRIOS (Atualizado para Comunidade)
   async list(req: Request, res: Response) {
     try {
-      const { workId, chapterId } = req.query;
+      const { workId, chapterId, type } = req.query; // Adicionado 'type'
 
-      const whereClause: any = { parentId: null }; // Busca apenas os "pais" primeiro
-      if (workId) whereClause.workId = String(workId);
-      if (chapterId) whereClause.chapterId = String(chapterId);
+      let whereClause: any = { parentId: null };
+
+      if (type === 'community') {
+        // Se for comunidade, busca onde NÃO tem obra nem capítulo
+        whereClause.workId = null;
+        whereClause.chapterId = null;
+      } else {
+        // Se for obra/capítulo normal
+        if (workId) whereClause.workId = String(workId);
+        if (chapterId) whereClause.chapterId = String(chapterId);
+      }
 
       const comments = await prisma.comment.findMany({
         where: whereClause,
         orderBy: { createdAt: 'desc' },
         include: {
-          // Dados do Autor e seus Cosméticos
           user: {
             select: {
               id: true, fullName: true, role: true,
@@ -66,7 +73,6 @@ export class CommentController {
               }
             }
           },
-          // Buscar Respostas (Nível 1 de aninhamento)
           replies: {
             orderBy: { createdAt: 'asc' },
             include: {

@@ -2,25 +2,23 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; // Hook de navegação
-import { Search, ShoppingBag, Menu, PawPrint, LogOut, User as UserIcon, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+// CORREÇÃO: Adicionado 'Users' na lista de importações abaixo
+import { Search, ShoppingBag, Menu, PawPrint, LogOut, User as UserIcon, ShieldCheck, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { useUserStore } from "@/store/useUserStore";
 
 export function Navbar() {
   const router = useRouter();
   
-  // Conectando com a "Carteira" e Auth (Zustand)
   const { patinhas, addPatinhas, isAuthenticated, user, logout } = useUserStore();
   
-  // Estado para garantir que o componente só mostre os dados depois de carregar no navegador
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // --- FUNÇÃO DE BUSCA ---
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       const term = e.currentTarget.value;
@@ -30,7 +28,6 @@ export function Navbar() {
     }
   };
 
-  // Verifica se usuário tem acesso ao painel admin
   const isAdminOrUploader = user && ['ADMIN', 'OWNER', 'UPLOADER'].includes(user.role);
 
   return (
@@ -38,20 +35,26 @@ export function Navbar() {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5 }}
-      // Visual: Vidro fumê com degradê para destacar o Hero
       className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-white/5 bg-gradient-to-b from-black/90 to-black/40 backdrop-blur-md transition-all"
     >
       <div className="container mx-auto h-full flex items-center justify-between px-4 md:px-6">
         
-        {/* --- LADO ESQUERDO: LOGO --- */}
-        <Link href="/" className="flex items-center gap-2 group z-50">
-          <div className="relative">
-            <PawPrint className="w-7 h-7 text-gato-purple group-hover:text-gato-amber transition-colors duration-300" />
-          </div>
-          <span className="text-xl font-bold tracking-tighter text-white">
-            GATO <span className="text-gato-purple">COMICS</span>
-          </span>
-        </Link>
+        {/* --- LADO ESQUERDO: LOGO E LINKS --- */}
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2 group z-50">
+            <div className="relative">
+              <PawPrint className="w-7 h-7 text-gato-purple group-hover:text-gato-amber transition-colors duration-300" />
+            </div>
+            <span className="text-xl font-bold tracking-tighter text-white">
+              GATO <span className="text-gato-purple">COMICS</span>
+            </span>
+          </Link>
+
+          {/* LINK DA COMUNIDADE (NOVO) */}
+          <Link href="/comunidade" className="hidden lg:flex items-center gap-2 text-sm font-bold text-zinc-400 hover:text-white transition-colors">
+             <Users className="w-4 h-4" /> Comunidade
+          </Link>
+        </div>
 
         {/* --- CENTRO: BUSCA (Oculto no Mobile) --- */}
         <div className="hidden md:flex flex-1 max-w-md mx-8 relative group">
@@ -61,7 +64,7 @@ export function Navbar() {
           <input 
             type="text" 
             placeholder="Qual mundo você quer caçar hoje?"
-            onKeyDown={handleSearch} // <--- Evento de Busca
+            onKeyDown={handleSearch}
             className="w-full bg-white/5 hover:bg-white/10 border border-white/5 focus:border-gato-purple/50 rounded-full py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-gato-purple/50 transition-all placeholder:text-gray-500"
           />
         </div>
@@ -69,10 +72,9 @@ export function Navbar() {
         {/* --- LADO DIREITO: HUD DO USUÁRIO --- */}
         <div className="flex items-center gap-4 md:gap-6 z-50">
           
-          {/* Renderiza apenas quando montado para evitar erros de hidratação */}
           {mounted && isAuthenticated ? (
             <>
-              {/* 1. Contador de Patinhas (Clicável para teste) */}
+              {/* Saldo / Link Loja */}
               <Link href="/loja">
                 <div 
                   className="hidden md:flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-gato-amber/30 hover:border-gato-amber/60 hover:bg-gato-amber/10 shadow-[0_0_10px_rgba(255,215,0,0.05)] hover:shadow-[0_0_15px_rgba(255,215,0,0.2)] transition-all cursor-pointer group active:scale-95"
@@ -85,18 +87,16 @@ export function Navbar() {
                 </div>
               </Link>
 
-              {/* 2. Botão Loja */}
+              {/* Botão Loja (Icone) */}
               <Link href="/loja">
                 <button className="relative text-gato-muted hover:text-white transition-colors p-1 mt-1">
                   <ShoppingBag className="w-5 h-5" />
-                  {/* Notificação pulsante */}
                   <span className="absolute top-0 right-0 w-2 h-2 bg-gato-purple rounded-full animate-pulse shadow-[0_0_8px_#8A2BE2]"></span>
                 </button>
               </Link>
 
-              {/* 3. Avatar do Usuário (Com Dropdown de Logout) */}
+              {/* Avatar do Usuário */}
               <div className="relative group cursor-pointer">
-                {/* Círculo do Avatar */}
                 <div className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-gato-amber via-gato-purple to-black animate-gradient-xy">
                   <div className="w-full h-full rounded-full bg-gray-900 overflow-hidden relative">
                     <div className="absolute inset-0 bg-gato-gray flex items-center justify-center text-sm text-white font-bold uppercase select-none">
@@ -105,7 +105,7 @@ export function Navbar() {
                   </div>
                 </div>
                 
-                {/* Dropdown Menu (Aparece no Hover) */}
+                {/* Dropdown Menu */}
                 <div className="absolute right-0 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right">
                   <div className="bg-gato-gray border border-white/10 rounded-xl shadow-2xl p-2 w-48 overflow-hidden backdrop-blur-xl">
                     <div className="px-3 py-2 border-b border-white/5 mb-1">
@@ -113,7 +113,6 @@ export function Navbar() {
                       <p className="text-sm font-bold text-white truncate">{user?.fullName}</p>
                     </div>
                     
-                    {/* Link para Admin (Se tiver permissão) */}
                     {isAdminOrUploader && (
                       <Link href="/admin/dashboard">
                         <button className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-gato-purple font-bold hover:bg-gato-purple/10 rounded-lg transition-colors mb-1">
@@ -158,7 +157,6 @@ export function Navbar() {
             )
           )}
           
-          {/* Menu Mobile */}
           <button className="md:hidden text-white">
             <Menu className="w-6 h-6" />
           </button>
