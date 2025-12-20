@@ -17,6 +17,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-br">
+      <head>
+        <meta name="monetag" content="e2804658af127602e7df221c43757497"></meta>
+      </head>
       <body className={`${inter.className} bg-gato-black text-gato-ghost antialiased`}>
         <Navbar /> {/* <--- Adicione aqui */}
         <main className="pt-16"> {/* Padding-top 16 para o conteúdo não ficar embaixo do header fixo */}
