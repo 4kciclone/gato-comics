@@ -73,16 +73,17 @@ export function Navbar() {
           {mounted && isAuthenticated ? (
             <>
               {/* 1. Contador de Patinhas (Clicável para teste) */}
-              <button 
-                onClick={() => addPatinhas(10)}
-                className="hidden md:flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-gato-amber/30 hover:border-gato-amber/60 hover:bg-gato-amber/10 shadow-[0_0_10px_rgba(255,215,0,0.05)] hover:shadow-[0_0_15px_rgba(255,215,0,0.2)] transition-all cursor-pointer group active:scale-95"
-                title="Clique para adicionar +10 Patinhas (Modo Teste)"
-              >
-                <PawPrint className="w-3.5 h-3.5 text-gato-amber group-hover:rotate-12 transition-transform" />
-                <span className="text-sm font-bold text-gato-amber">
-                  {patinhas}
-                </span>
-              </button>
+              <Link href="/loja">
+                <div 
+                  className="hidden md:flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-gato-amber/30 hover:border-gato-amber/60 hover:bg-gato-amber/10 shadow-[0_0_10px_rgba(255,215,0,0.05)] hover:shadow-[0_0_15px_rgba(255,215,0,0.2)] transition-all cursor-pointer group active:scale-95"
+                  title="Ir para a Loja"
+                >
+                  <PawPrint className="w-3.5 h-3.5 text-gato-amber group-hover:rotate-12 transition-transform" />
+                  <span className="text-sm font-bold text-gato-amber">
+                    {patinhas}
+                  </span>
+                </div>
+              </Link>
 
               {/* 2. Botão Loja */}
               <Link href="/loja">
