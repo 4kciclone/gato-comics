@@ -65,29 +65,30 @@ model User {
   avatarUrl     String?
   role          Role      @default(USER)
   
-  // Carteira
+  // Carteira Premium
   patinhasBalance Int     @default(0)
+  
+  // --- NOVOS CAMPOS LITE (ANÚNCIOS) ---
+  patinhasLite    Int      @default(0) 
+  dailyAdCount    Int      @default(0) 
+  lastAdDate      DateTime @default(now()) 
   
   // Relacionamentos
   subscription  Subscription?
   unlocks       Unlock[]
   transactions  Transaction[]
   comments      Comment[]
+  inventory     UserItem[]    // Cosméticos
+  library       UserLibrary[] // Favoritos/Notas
   
-  // Inventário de Cosméticos
-  inventory     UserItem[]
-  
-  // Configs rápidas (JSON)
+  // Configs
   customization Json?     @default("{}") 
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-   library       UserLibrary[] 
-
   @@map("users")
 }
-
 // --- LOJA DE COSMÉTICOS ---
 
 model ShopItem {

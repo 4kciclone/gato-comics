@@ -9,9 +9,10 @@ import { AdminController } from '../controllers/adminController';
 import { UploadController } from '../controllers/uploadController';
 import { SettingsController } from '../controllers/settingsController';
 import { PlanController } from '../controllers/planController';
-import { PaymentController } from '../controllers/paymentController'; // <--- O QUE FALTAVA
+import { PaymentController } from '../controllers/paymentController'; 
 import { CosmeticController } from '../controllers/cosmeticController';
 import { CommentController } from '../controllers/commentController';
+import { AdsController } from '../controllers/adsController'; // <--- ADICIONADO AQUI
 
 
 // --- IMPORTAÇÃO DOS MIDDLEWARES ---
@@ -32,6 +33,7 @@ const planController = new PlanController();
 const paymentController = new PaymentController(); 
 const cosmeticController = new CosmeticController();
 const commentController = new CommentController();
+const adsController = new AdsController(); // <--- ADICIONADO AQUI
 
 
 
@@ -61,6 +63,7 @@ router.post('/shop/items/buy', authMiddleware, cosmeticController.buy); // Compr
 
 router.get('/comments', commentController.list); // Pública
 router.post('/comments', authMiddleware, commentController.create); // Protegida
+
 // ==================================================
 // 👤 ROTAS DO USUÁRIO (Requer Login)
 // ==================================================
@@ -74,7 +77,7 @@ router.get('/chapters/:id/content', authMiddleware, chapterController.getContent
 // Transações
 router.post('/chapters/:id/unlock', authMiddleware, chapterController.unlock);
 
-// PAGAMENTO (STRIPE) - Corrigido para usar paymentController
+// PAGAMENTO (STRIPE)
 router.post('/shop/checkout', authMiddleware, (req, res) => paymentController.createCheckoutSession(req, res));
 router.get('/auth/inventory', authMiddleware, cosmeticController.getInventory);
 router.post('/auth/inventory/equip', authMiddleware, cosmeticController.equip);
@@ -82,6 +85,9 @@ router.post('/auth/inventory/equip', authMiddleware, cosmeticController.equip);
 // Interação com Obra (Like, Rate, Status)
 router.get('/works/:id/interaction', authMiddleware, workController.getUserInteraction);
 router.post('/works/:id/interaction', authMiddleware, workController.updateInteraction);
+
+// Ads (Patinhas Lite)
+router.post('/ads/watch', authMiddleware, adsController.watchAd); // <--- AGORA FUNCIONA
 
 // ==================================================
 // 🎨 ROTAS DE CRIADOR (Uploader / Admin / Owner)

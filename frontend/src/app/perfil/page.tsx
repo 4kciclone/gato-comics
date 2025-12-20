@@ -6,7 +6,7 @@ import api from "@/lib/api";
 import { useUserStore } from "@/store/useUserStore";
 import { 
   User, CreditCard, LogOut, 
-  Palette, Shield, Crown, TrendingUp, History, Check, Loader2 
+  Palette, Shield, Crown, TrendingUp, History, Check, Loader2, Zap, PlayCircle, X 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer";
@@ -52,7 +52,9 @@ interface UserProfile {
   fullName: string;
   email: string;
   role: string;
-  patinhasBalance: number; // O nome correto é este
+  patinhasBalance: number; // Saldo Premium
+  patinhasLite: number;    // Saldo Grátis (Ads)
+  dailyAdCount: number;    // Contador diário de anúncios
   createdAt: string;
   transactions: Transaction[];
   unlocks: UnlockHistory[];
@@ -67,15 +69,22 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'wallet' | 'customize'>('overview');
   
+  // Estado de Inventário (Carregado sob demanda na aba Customize)
   const [inventory, setInventory] = useState<UserItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [equippingId, setEquippingId] = useState<string | null>(null);
 
-  // 1. CARREGAR PERFIL GERAL
+  // Estado do Modal de Anúncio
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [adProgress, setAdProgress] = useState(0);
+
+  // --- 1. CARREGAR PERFIL GERAL ---
   const fetchProfile = async () => {
     try {
       const res = await api.get('/auth/profile');
       setProfile(res.data);
+      
+      // Carrega o inventário inicial do perfil também para o Header funcionar
       if (res.data.inventory) setInventory(res.data.inventory);
       
       // Sincroniza store global
@@ -92,7 +101,7 @@ export default function ProfilePage() {
     fetchProfile();
   }, []);
 
-  // 2. CARREGAR INVENTÁRIO (Ao entrar na aba Customizar)
+  // --- 2. CARREGAR INVENTÁRIO (Ao entrar na aba Customizar) ---
   useEffect(() => {
     if (activeTab === 'customize') {
       setLoadingInventory(true);
@@ -103,13 +112,67 @@ export default function ProfilePage() {
     }
   }, [activeTab]);
 
-  // 3. AÇÃO: EQUIPAR ITEM
+  // --- 3. LÓGICA DE ASSISTIR ANÚNCIO (PATINHAS LITE) ---
+  const handleWatchAd = () => {
+    if (!profile) return;
+    if (profile.dailyAdCount >= 4) return alert("Limite diário atingido! Volte amanhã.");
+    
+    setShowAdModal(true);
+    setAdProgress(0);
+
+    // Simula anúncio de 5 segundos
+    const interval = setInterval(() => {
+        setAdProgress(prev => {
+            if (prev >= 100) {
+                clearInterval(interval);
+                return 100;
+            }
+            return prev + 2; // +2% a cada 100ms
+        });
+    }, 100);
+  };
+
+  // Trigger quando o anúncio termina
+  useEffect(() => {
+    if (adProgress === 100 && showAdModal) {
+        finishAd();
+    }
+  }, [adProgress, showAdModal]);
+
+  const finishAd = async () => {
+    try {
+        const res = await api.post('/ads/watch');
+        
+        // Atualiza perfil localmente
+        if (profile) {
+            setProfile({
+                ...profile,
+                patinhasLite: res.data.patinhasLite,
+                dailyAdCount: res.data.dailyAdCount
+            });
+        }
+        
+        // Pequeno delay para UX antes de fechar
+        setTimeout(() => {
+            setShowAdModal(false);
+            setAdProgress(0);
+            alert("Você ganhou 1 Patinha Lite!");
+        }, 500); 
+
+    } catch (error) {
+        alert("Erro ao validar anúncio.");
+        setShowAdModal(false);
+    }
+  };
+
+  // --- 4. AÇÃO: EQUIPAR ITEM ---
   const handleEquip = async (userItemId: string, type: string) => {
     setEquippingId(userItemId);
     try {
       await api.post('/auth/inventory/equip', { userItemId });
       
       const newInventory = inventory.map(ui => {
+        // Desequipa outros do mesmo tipo, equipa o selecionado
         if (ui.item.type === type) {
           return { ...ui, isEquipped: ui.id === userItemId };
         }
@@ -117,7 +180,7 @@ export default function ProfilePage() {
       });
       
       setInventory(newInventory);
-      if (profile) setProfile({ ...profile, inventory: newInventory });
+      if (profile) setProfile({ ...profile, inventory: newInventory }); // Atualiza Header
 
     } catch (error) {
       alert("Erro ao equipar item.");
@@ -131,6 +194,7 @@ export default function ProfilePage() {
     router.push('/');
   };
 
+  // Helpers para o Header
   const equippedBanner = inventory.find(i => i.isEquipped && i.item.type === 'BANNER');
   const equippedFrame = inventory.find(i => i.isEquipped && i.item.type === 'FRAME');
   const equippedTitle = inventory.find(i => i.isEquipped && i.item.type === 'TITLE_EFFECT');
@@ -143,7 +207,7 @@ export default function ProfilePage() {
       
       {/* --- HEADER DO PERFIL DINÂMICO --- */}
       <div className="relative h-64 w-full bg-zinc-900 border-b border-white/5 overflow-hidden">
-        {/* Banner Equipado ou Padrão */}
+        {/* Banner Equipado */}
         {equippedBanner ? (
             <CosmeticRenderer 
                 type="BANNER" 
@@ -157,14 +221,12 @@ export default function ProfilePage() {
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10 pointer-events-none"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
         
-        {/* Container Info */}
         <div className="container mx-auto px-4 h-full flex items-end pb-8 relative z-10">
           <div className="flex items-end gap-6 w-full">
             
             {/* Avatar com Moldura */}
             <div className="relative -mb-12 group">
               <div className="w-32 h-32 relative flex items-center justify-center">
-                 {/* Moldura */}
                  <CosmeticRenderer 
                     type="FRAME" 
                     cssString={equippedFrame?.item.cssClass} 
@@ -193,12 +255,15 @@ export default function ProfilePage() {
                     {profile.fullName}
                 </CosmeticRenderer>
               </h1>
-              <p className="text-zinc-400 text-sm flex items-center gap-2">
-                {profile.email} • Membro desde {new Date(profile.createdAt).getFullYear()}
-              </p>
+              <div className="flex items-center gap-4 mt-1 text-sm text-zinc-400">
+                <span>{profile.email}</span>
+                <span className="w-1 h-1 bg-zinc-600 rounded-full"/>
+                <span className="text-gato-amber font-bold">{profile.patinhasBalance} 🐾</span>
+                <span className="text-gato-green font-bold flex items-center gap-1"><Zap className="w-3 h-3"/> {profile.patinhasLite} Lite</span>
+              </div>
             </div>
 
-            {/* Ações Topo */}
+            {/* Botões Topo */}
             <div className="hidden md:flex gap-3 mb-2">
               <button onClick={() => setActiveTab('customize')} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white font-medium transition-colors border border-white/5">
                 Editar Visual
@@ -214,12 +279,12 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* --- NAVEGAÇÃO (TABS) --- */}
+      {/* --- NAVEGAÇÃO --- */}
       <div className="container mx-auto px-4 mt-16">
         <div className="flex gap-6 border-b border-white/5">
           {[
             { id: 'overview', label: 'Visão Geral', icon: User },
-            { id: 'wallet', label: 'Carteira & Histórico', icon: CreditCard },
+            { id: 'wallet', label: 'Carteira & Bônus', icon: CreditCard },
             { id: 'customize', label: 'Customização', icon: Palette },
           ].map((tab) => (
             <button
@@ -237,7 +302,7 @@ export default function ProfilePage() {
           ))}
         </div>
 
-        {/* --- CONTEÚDO DAS ABAS --- */}
+        {/* --- CONTEÚDO --- */}
         <div className="mt-8">
           <AnimatePresence mode="wait">
             
@@ -254,7 +319,6 @@ export default function ProfilePage() {
                     <h3 className="text-zinc-400 text-xs font-bold uppercase mb-4">Estatísticas</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-black/20 rounded-xl">
-                        {/* CORREÇÃO AQUI: patinhasBalance */}
                         <p className="text-2xl font-bold text-white">{profile.patinhasBalance}</p>
                         <p className="text-xs text-zinc-500">Patinhas</p>
                       </div>
@@ -266,7 +330,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* Histórico de Leitura */}
+                {/* Histórico */}
                 <div className="lg:col-span-2">
                   <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                     <History className="w-5 h-5 text-gato-purple" /> Continuar Lendo
@@ -300,42 +364,58 @@ export default function ProfilePage() {
               </motion.div>
             )}
 
-            {/* 2. CARTEIRA */}
+            {/* 2. CARTEIRA & ADS */}
             {activeTab === 'wallet' && (
-              <motion.div key="wallet" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <motion.div key="wallet" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+                
+                {/* MISSÃO DIÁRIA */}
+                <div className="bg-gradient-to-r from-zinc-900 to-zinc-900/50 border border-gato-green/30 rounded-2xl p-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-gato-green/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+                    
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
+                        <div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Zap className="w-5 h-5 text-gato-green fill-current"/> Missão Diária
+                            </h3>
+                            <p className="text-zinc-400 text-sm mt-1">Assista anúncios para ganhar Patinhas Lite grátis.</p>
+                            <div className="mt-4 flex items-center gap-2">
+                                <div className="text-xs font-bold bg-black/40 px-3 py-1 rounded-full text-zinc-300">
+                                    Progresso: <span className={profile.dailyAdCount >= 4 ? "text-gato-green" : "text-white"}>{profile.dailyAdCount}/4</span>
+                                </div>
+                                {profile.dailyAdCount >= 4 && <span className="text-xs text-gato-green font-bold">Concluído por hoje!</span>}
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleWatchAd}
+                            disabled={profile.dailyAdCount >= 4}
+                            className="bg-gato-green hover:bg-gato-green/90 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-gato-green/20 transition-all active:scale-95"
+                        >
+                            <PlayCircle className="w-5 h-5" /> Assistir Anúncio (+1 Lite)
+                        </button>
+                    </div>
+                </div>
+
+                {/* EXTRATO */}
                 <div className="bg-zinc-900/30 border border-white/5 rounded-2xl overflow-hidden">
                   <div className="p-6 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
-                    <div>
-                      <h3 className="font-bold text-white">Extrato de Patinhas</h3>
-                      <p className="text-xs text-zinc-500">Seu histórico financeiro completo</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-zinc-400">Saldo Atual</p>
-                      {/* CORREÇÃO AQUI: patinhasBalance */}
-                      <p className="text-xl font-bold text-gato-amber">{profile.patinhasBalance} 🐾</p>
-                    </div>
+                    <h3 className="font-bold text-white">Extrato de Transações</h3>
                   </div>
-                  
                   <div className="divide-y divide-white/5">
                     {profile.transactions.length === 0 ? (
-                      <div className="p-8 text-center text-zinc-500">Nenhuma transação encontrada.</div>
+                        <div className="p-8 text-center text-zinc-500">Nenhuma transação recente.</div>
                     ) : (
-                      profile.transactions.map((tx) => (
-                        <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02]">
-                          <div className="flex items-center gap-4">
-                            <div className={`p-2 rounded-lg ${tx.amount > 0 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                              {tx.amount > 0 ? <TrendingUp className="w-4 h-4" /> : <LogOut className="w-4 h-4 rotate-180" />}
+                        profile.transactions.map((tx) => (
+                            <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02]">
+                            <div className="text-sm">
+                                <p className="text-white font-medium">{tx.description}</p>
+                                <p className="text-zinc-500 text-xs">{new Date(tx.createdAt).toLocaleString()}</p>
                             </div>
-                            <div>
-                              <p className="text-white text-sm font-medium">{tx.description}</p>
-                              <p className="text-zinc-500 text-xs">{new Date(tx.createdAt).toLocaleString()}</p>
+                            <span className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-zinc-400'}`}>
+                                {tx.amount > 0 ? '+' : ''}{tx.amount}
+                            </span>
                             </div>
-                          </div>
-                          <span className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-zinc-400'}`}>
-                            {tx.amount > 0 ? '+' : ''}{tx.amount}
-                          </span>
-                        </div>
-                      ))
+                        ))
                     )}
                   </div>
                 </div>
@@ -422,6 +502,32 @@ export default function ProfilePage() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* --- MODAL DE ANÚNCIO (SIMULAÇÃO) --- */}
+      <AnimatePresence>
+        {showAdModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-lg bg-zinc-900 border border-white/10 rounded-2xl p-8 text-center z-10">
+                    <h2 className="text-2xl font-bold text-white mb-2">Assistindo Anúncio...</h2>
+                    <p className="text-zinc-400 mb-8">Por favor, aguarde para receber sua recompensa.</p>
+                    
+                    {/* Barra de Progresso */}
+                    <div className="h-4 w-full bg-black/50 rounded-full overflow-hidden mb-4 border border-white/5">
+                        <motion.div 
+                            className="h-full bg-gato-green" 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${adProgress}%` }}
+                        />
+                    </div>
+                    <p className="text-gato-green font-mono font-bold">{adProgress}%</p>
+                    
+                    <button onClick={() => setShowAdModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
