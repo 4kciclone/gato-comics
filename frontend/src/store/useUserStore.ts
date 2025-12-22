@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+// --- ATUALIZAÇÃO AQUI ---
 interface UserData {
   id: string;
   fullName: string;
   email: string;
   role: string;
+  avatarUrl?: string | null; // <--- Adicionado para corrigir o erro
 }
+// ------------------------
 
 interface UserState {
   // Dados de Auth
@@ -52,7 +55,7 @@ export const useUserStore = create<UserState>()(
         unlockedChapters: [] 
       }),
 
-      // Ações de Carteira (Mockada no Frontend por enquanto, idealmente bateria na API)
+      // Ações de Carteira
       addPatinhas: (amount) => set((state) => ({ patinhas: state.patinhas + amount })),
 
       unlockChapter: (workId, chapterId, cost) => {
@@ -60,7 +63,8 @@ export const useUserStore = create<UserState>()(
         const key = `${workId}-${chapterId}`;
 
         if (unlockedChapters.includes(key)) return true;
-        if (patinhas < cost) return false;
+        // Permite "comprar" se o custo for 0 mesmo sem saldo
+        if (cost > 0 && patinhas < cost) return false;
 
         set({
           patinhas: patinhas - cost,
