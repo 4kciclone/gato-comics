@@ -84,6 +84,10 @@ model User {
   // Configs
   customization Json?     @default("{}") 
 
+  // Recuperação de Senha
+  resetToken        String?   @unique
+  resetTokenExpiry  DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

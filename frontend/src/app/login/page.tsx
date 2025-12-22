@@ -23,17 +23,19 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Chama o backend
+      // 1. Chama o backend para autenticar
       const res = await api.post("/auth/login", { email, password });
       
-      // Salva na store global
+      // 2. Salva os dados na store global (Zustand)
       const { user, token } = res.data;
       login(token, user, user.patinhasBalance || 0);
 
-      // Redireciona
+      // 3. Redireciona para a Home
       router.push("/");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Falha ao entrar");
+      // Tratamento de erro seguro
+      const msg = err.response?.data?.error || "Falha ao entrar. Verifique suas credenciais.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -41,8 +43,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gato-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Effect */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gato-purple/20 blur-[100px] rounded-full" />
+      
+      {/* Efeito de Fundo */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gato-purple/20 blur-[100px] rounded-full pointer-events-none" />
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -51,9 +54,10 @@ export default function LoginPage() {
       >
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo de volta</h1>
-          <p className="text-gato-muted text-sm">Entre para acessar sua coleção</p>
+          <p className="text-gato-muted text-sm">Entre para acessar sua coleção e continuar lendo.</p>
         </div>
 
+        {/* Mensagem de Erro */}
         {error && (
           <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg flex items-center gap-2 text-sm">
             <AlertCircle className="w-4 h-4" /> {error}
@@ -61,6 +65,8 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
+          
+          {/* Input Email */}
           <div className="space-y-1">
             <label className="text-xs text-gato-muted uppercase font-bold ml-1">Email</label>
             <div className="relative">
@@ -76,6 +82,7 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Input Senha */}
           <div className="space-y-1">
             <label className="text-xs text-gato-muted uppercase font-bold ml-1">Senha</label>
             <div className="relative">
@@ -91,15 +98,24 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Link Esqueci Minha Senha */}
+          <div className="flex justify-end">
+            <Link href="/recover" className="text-xs text-gato-purple hover:text-white transition-colors">
+                Esqueceu a senha?
+            </Link>
+          </div>
+
+          {/* Botão Entrar */}
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-gradient-to-r from-gato-purple to-indigo-600 hover:brightness-110 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-gato-purple/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-gato-purple to-indigo-600 hover:brightness-110 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-gato-purple/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Entrar <ArrowRight className="w-5 h-5" /></>}
           </button>
         </form>
 
+        {/* Rodapé Criar Conta */}
         <div className="mt-8 text-center text-sm text-gato-muted">
           Não tem uma conta?{" "}
           <Link href="/register" className="text-gato-purple hover:text-white font-bold transition-colors">

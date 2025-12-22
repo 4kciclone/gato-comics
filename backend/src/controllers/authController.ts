@@ -1,13 +1,17 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto'; // Nativo do Node.js
 import { generateToken } from '../utils/jwt';
+import { sendResetEmail } from '../utils/mailer'; // Certifique-se de ter criado este arquivo
 
 const prisma = new PrismaClient();
 
 export class AuthController {
   
+  // ==========================================
   // LOGIN
+  // ==========================================
   async login(req: Request, res: Response) {
     try {
       const { email, password } = req.body;
@@ -34,7 +38,9 @@ export class AuthController {
     }
   }
 
+  // ==========================================
   // REGISTRO
+  // ==========================================
   async register(req: Request, res: Response) {
     try {
       const { fullName, email, password } = req.body;
@@ -71,7 +77,9 @@ export class AuthController {
     }
   }
 
-  // PERFIL COMPLETO (Corrigido para trazer Inventário)
+  // ==========================================
+  // PERFIL (Com Inventário)
+  // ==========================================
   async getProfile(req: Request, res: Response) {
     try {
       const userId = req.userId!;
@@ -79,12 +87,10 @@ export class AuthController {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          // Histórico Financeiro
           transactions: {
             take: 10,
             orderBy: { createdAt: 'desc' }
           },
-          // Histórico de Leitura
           unlocks: {
             take: 5,
             orderBy: { createdAt: 'desc' },
@@ -98,13 +104,11 @@ export class AuthController {
               }
             }
           },
-          // --- CORREÇÃO AQUI: Trazer o inventário junto com o perfil ---
           inventory: {
             include: {
               item: true
             }
           }
-          // -------------------------------------------------------------
         }
       });
 
@@ -119,6 +123,81 @@ export class AuthController {
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao buscar perfil' });
+    }
+  }
+
+  // ==========================================
+  // ESQUECI A SENHA (Envia Email)
+  // ==========================================
+  async forgotPassword(req: Request, res: Response) {
+    try {
+      const { email } = req.body;
+      const user = await prisma.user.findUnique({ where: { email } });
+
+      // Se não achar o usuário, retornamos sucesso mesmo assim por segurança (evitar enumeration attack)
+      if (!user) {
+        return res.json({ message: 'Se o email existir, um link foi enviado.' });
+      }
+
+      // Gera token seguro
+      const token = crypto.randomBytes(32).toString('hex');
+      const now = new Date();
+      now.setHours(now.getHours() + 1); // Expira em 1 hora
+
+      // Salva token no banco
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetToken: token,
+          resetTokenExpiry: now
+        }
+      });
+
+      // Envia o email (Lógica no utils/mailer.ts)
+      await sendResetEmail(user.email, token);
+
+      return res.json({ message: 'Email enviado.' });
+
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao processar solicitação' });
+    }
+  }
+
+  // ==========================================
+  // REDEFINIR SENHA (Salva Nova Senha)
+  // ==========================================
+  async resetPassword(req: Request, res: Response) {
+    try {
+      const { token, newPassword } = req.body;
+
+      const user = await prisma.user.findFirst({
+        where: {
+          resetToken: token,
+          resetTokenExpiry: { gt: new Date() } // Token deve ser válido e não expirado
+        }
+      });
+
+      if (!user) {
+        return res.status(400).json({ error: 'Token inválido ou expirado.' });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          resetToken: null,
+          resetTokenExpiry: null
+        }
+      });
+
+      return res.json({ success: true, message: 'Senha alterada com sucesso.' });
+
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao redefinir senha' });
     }
   }
 }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Crown, Gem, Sparkles, Zap, Loader2 } from "lucide-react";
+import { Check, Crown, Gem, Sparkles, Zap, Loader2, Ban } from "lucide-react"; // <--- ADICIONADO BAN AQUI
 import { clsx } from "clsx";
 import api from "@/lib/api";
 
@@ -21,10 +21,15 @@ export function PricingSection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/plans').then(res => {
-      setPlans(res.data);
-      setLoading(false);
-    });
+    api.get('/plans')
+      .then(res => {
+        setPlans(res.data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Erro ao carregar planos", err);
+        setLoading(false);
+      });
   }, []);
 
   // Helper para estilizar baseado no tier
@@ -42,10 +47,12 @@ export function PricingSection() {
 
   return (
     <section className="py-20 relative bg-gato-black">
+      {/* Efeito de Luz de Fundo */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-gato-purple/10 blur-[120px] rounded-full pointer-events-none" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         
+        {/* Cabeçalho da Seção */}
         <div className="text-center mb-16 space-y-4">
           <h2 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
             Escolha seu <span className="text-gato-purple">Caminho</span>
@@ -55,6 +62,7 @@ export function PricingSection() {
           </p>
         </div>
 
+        {/* Grid dos Planos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
           {plans.map((plan, index) => {
             const style = getStyle(plan.tier);
@@ -72,12 +80,14 @@ export function PricingSection() {
                   style.popular ? "h-[460px] shadow-[0_0_40px_rgba(255,215,0,0.15)] border-2" : "h-[420px] shadow-lg"
                 )}
               >
+                {/* Badge de "Popular" */}
                 {style.popular && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gato-amber text-black font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-lg animate-pulse">
                     Recomendado
                   </div>
                 )}
 
+                {/* Ícone e Nome */}
                 <div className="mb-4 flex items-center justify-between">
                   <div className="p-3 rounded-lg bg-black/30 border border-white/5">
                     {style.icon}
@@ -87,6 +97,7 @@ export function PricingSection() {
                   </h3>
                 </div>
 
+                {/* Preço */}
                 <div className="mb-6">
                   <span className="text-sm text-gato-muted">R$</span>
                   <span className="text-4xl font-extrabold text-white">{Number(plan.price).toFixed(2).split('.')[0]}</span>
@@ -94,7 +105,16 @@ export function PricingSection() {
                   <span className="text-gato-muted text-sm"> /mês</span>
                 </div>
 
+                {/* Lista de Benefícios */}
                 <ul className="space-y-3 mb-8 flex-1">
+                  {/* Benefício Novo: Sem Ads */}
+                  <li className="flex items-center gap-3 text-sm text-gato-ghost">
+                    <div className="p-0.5 bg-gato-green/10 rounded-full">
+                        <Ban className="w-3 h-3 text-gato-green shrink-0" />
+                    </div>
+                    <span><strong>Sem Anúncios</strong></span>
+                  </li>
+
                   <li className="flex items-center gap-3 text-sm text-gato-ghost">
                     <Check className="w-4 h-4 text-gato-green shrink-0" />
                     <span><strong className="text-white">{plan.maxWorksSelect}</strong> Obras à escolha</span>
@@ -109,6 +129,7 @@ export function PricingSection() {
                   </li>
                 </ul>
 
+                {/* Botão de Ação */}
                 <button 
                   className={clsx(
                     "w-full py-3 rounded-xl font-bold transition-all active:scale-95",
