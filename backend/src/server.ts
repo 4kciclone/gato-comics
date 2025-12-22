@@ -6,45 +6,61 @@ import { PaymentController } from './controllers/paymentController';
 const app = express();
 const paymentController = new PaymentController();
 
-// CONFIGURAÇÃO DE CORS MELHORADA
+// ==========================================
+// 1. CONFIGURAÇÃO DE SEGURANÇA (CORS)
+// ==========================================
 app.use(cors({
   origin: [
-    'http://localhost:3000',           
-    'http://127.0.0.1:3000',          
-    'https://gatocomics.com.br',       
-    'https://www.gatocomics.com.br',   
-    'https://gato-comics.vercel.app'   
-  ],
+    'http://localhost:3000',           // Desenvolvimento Local
+    'http://127.0.0.1:3000',           // Desenvolvimento Local IP
+    'https://gatocomics.com.br',       // Produção (Seu Domínio)
+    'https://www.gatocomics.com.br',   // Produção WWW
+    'https://gato-comics.vercel.app',  // Vercel Default
+    process.env.FRONTEND_URL || ''     // Variável do .env (Fallback dinâmico)
+  ].filter(Boolean), // Remove entradas vazias/nulas
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ROTA WEBHOOK STRIPE (RAW BODY)
+// ==========================================
+// 2. WEBHOOK STRIPE (CASO ESPECIAL)
+// ==========================================
+// Precisa vir ANTES do express.json() porque o Stripe exige 
+// o corpo da requisição em formato RAW (Buffer) para validar a assinatura.
 app.post(
   '/api/webhook/stripe', 
   express.raw({ type: 'application/json' }), 
   (req, res) => paymentController.handleWebhook(req, res)
 );
 
-// JSON PARSER
+// ==========================================
+// 3. MIDDLEWARES GERAIS
+// ==========================================
 app.use(express.json());
 
-// LOG DE REQUESTS (Para você ver se o back está recebendo)
+// Log de Requisições (Com Horário para Debug na VPS)
 app.use((req, res, next) => {
   if (req.url !== '/api/webhook/stripe') {
-    console.log(`[${req.method}] ${req.url}`);
+    // Ex: [2023-12-25T10:00:00.000Z] GET /api/works
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   }
   next();
 });
 
-// ROTAS
+// ==========================================
+// 4. ROTAS
+// ==========================================
 app.use('/api', router);
 
-// HEALTH CHECK
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+// Rota de Saúde (Health Check)
+app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
+// ==========================================
+// 5. INICIALIZAÇÃO
+// ==========================================
 const PORT = process.env.PORT || 4000; 
+
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 API rodando na porta ${PORT}`);
 });

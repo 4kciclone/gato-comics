@@ -1,23 +1,26 @@
 import { Hero } from "@/components/layout/Hero";
-import { PricingSection } from "@/components/store/PricingSection";
+// REMOVIDO: import { PricingSection } ...
 import { MangaList } from "@/components/catalog/MangaList";
-import { RankingSection } from "@/components/home/RankingSection"; // <--- Importe
+import { RankingSection } from "@/components/home/RankingSection";
+import { RecommendedSection } from "@/components/home/RecommendedSection"; // <--- NOVO
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-gato-black pb-20">
       
+      {/* 1. Destaque Principal */}
       <Hero />
 
-      {/* Nova Seção de Ranking */}
+      {/* 2. Recomendados (NOVO - Substitui Planos) */}
+      <RecommendedSection />
+
+      {/* 3. Top 10 (Ranking) */}
       <RankingSection />
 
-      {/* Lista de Lançamentos */}
+      {/* 4. Lista Geral (Lançamentos) */}
       <div className="bg-gradient-to-b from-black/0 via-black to-black relative z-20">
         <MangaList />
       </div>
-
-      <PricingSection />
 
     </main>
   );
