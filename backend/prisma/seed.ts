@@ -1,13 +1,12 @@
-// backend/prisma/seed.ts
-import { PrismaClient, PlanTier } from '@prisma/client'; // <--- Importei PlanTier aqui
+import { PrismaClient, PlanTier } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Iniciando Seed...');
+  console.log('🌱 Iniciando Seed (Correção de Duplicatas)...');
 
-  // 1. Criar Planos (Usando o Enum PlanTier corretamente)
+  // 1. Criar Planos (Upsert evita duplicatas)
   const plans = [
     { name: 'Caçador Bronze', tier: PlanTier.BRONZE, price: 6.99, monthlyPatinhas: 10, maxWorksSelect: 1, storeDiscount: 5 },
     { name: 'Caçador Prata', tier: PlanTier.PRATA, price: 14.99, monthlyPatinhas: 15, maxWorksSelect: 2, storeDiscount: 8 },
@@ -18,13 +17,21 @@ async function main() {
   for (const p of plans) {
     await prisma.plan.upsert({
       where: { tier: p.tier },
-      update: {},
+      update: { 
+        price: p.price, 
+        monthlyPatinhas: p.monthlyPatinhas,
+        maxWorksSelect: p.maxWorksSelect,
+        storeDiscount: p.storeDiscount
+      },
       create: p,
     });
   }
-  console.log('✅ Planos criados.');
+  console.log('✅ Planos verificados.');
 
-  // 2. Criar Pacotes de Patinhas
+  // 2. CORREÇÃO: Limpar Pacotes Antigos e Recriar
+  // Isso apaga todos os pacotes existentes para remover duplicatas
+  await prisma.patinhaPack.deleteMany({});
+  
   const packs = [
     { name: 'Punhado de Patinhas', patinhas: 10, bonus: 1, price: 5.99 },
     { name: 'Saco de Patinhas', patinhas: 20, bonus: 2, price: 9.99 },
@@ -36,29 +43,27 @@ async function main() {
   for (const pack of packs) {
     await prisma.patinhaPack.create({ data: pack });
   }
-  console.log('✅ Pacotes criados.');
+  console.log('✅ Pacotes recriados (Limpos).');
 
-  // 3. Criar Usuário Admin
+  // 3. Admin (Upsert evita duplicatas)
   const passwordHash = await bcrypt.hash('admin123', 10);
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'admin@gatocomics.com' },
-    update: {},
+    update: {}, // Não muda nada se já existe
     create: {
       email: 'admin@gatocomics.com',
       passwordHash,
       fullName: 'Admin Supremo',
-      role: 'ADMIN',
+      role: 'OWNER', // Garante que é Owner
       patinhasBalance: 9999,
     },
   });
-  console.log('✅ Admin criado (admin@gatocomics.com / admin123).');
+  console.log('✅ Admin verificado.');
 
-  // 4. Criar Obra de Exemplo (Solo Leveling)
-  // Nota: Primeiro verificamos se ela já existe para não duplicar no seed
+  // 4. Obra (Verifica se existe)
   const existingWork = await prisma.work.findUnique({ where: { slug: 'solo-leveling' }});
-  
   if (!existingWork) {
-    const solo = await prisma.work.create({
+    await prisma.work.create({
       data: {
         title: 'Solo Leveling',
         slug: 'solo-leveling',
@@ -70,19 +75,17 @@ async function main() {
         status: 'COMPLETED',
         chapters: {
           create: [
-            { number: 1, title: 'O Começo', isFree: true, price: 0, pages: ['https://exemplo.com/pg1.jpg'] },
-            { number: 2, title: 'O Templo', isFree: true, price: 0, pages: ['https://exemplo.com/pg1.jpg'] },
-            { number: 3, title: 'O Sorriso', isFree: false, price: 1, pages: ['https://exemplo.com/pg1.jpg'] },
+            { number: 1, title: 'O Começo', isFree: true, price: 0, pages: [] },
+            { number: 2, title: 'O Templo', isFree: true, price: 0, pages: [] },
+            { number: 3, title: 'O Sorriso', isFree: false, price: 1, pages: [] },
           ]
         }
       }
     });
-    console.log(`✅ Obra criada: ${solo.title}`);
-  } else {
-    console.log('ℹ️ Obra Solo Leveling já existe.');
+    console.log(`✅ Obra criada.`);
   }
 
-  console.log('🚀 Seed finalizado com sucesso!');
+  console.log('🚀 Banco de dados corrigido!');
 }
 
 main()
