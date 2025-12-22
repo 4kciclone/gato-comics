@@ -3,8 +3,11 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Menu, PawPrint, LogOut, User as UserIcon, ShieldCheck, Users, X, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Search, Menu, PawPrint, LogOut, User as UserIcon, 
+  ShieldCheck, Users, X, Sparkles, Zap, ChevronRight, ShoppingBag // <--- ADICIONADO AQUI
+} from "lucide-react";
+import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- ADICIONADO 'Variants'
 import { useUserStore } from "@/store/useUserStore";
 
 export function Navbar() {
@@ -13,7 +16,7 @@ export function Navbar() {
   
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false); // <--- NOVO ESTADO
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -28,6 +31,20 @@ export function Navbar() {
   };
 
   const isAdminOrUploader = user && ['ADMIN', 'OWNER', 'UPLOADER'].includes(user.role);
+
+  // Variantes de Animação com Tipagem Explícita para corrigir o erro TS2322
+  const menuVariants: Variants = {
+    closed: { x: "-100%" },
+    open: { 
+        x: 0,
+        transition: { type: "spring", stiffness: 300, damping: 30, staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants: Variants = {
+    closed: { x: -20, opacity: 0 },
+    open: { x: 0, opacity: 1 }
+  };
 
   return (
     <>
@@ -56,10 +73,10 @@ export function Navbar() {
           {/* LOGO */}
           <div className="flex items-center gap-4">
             <button 
-              className="md:hidden p-2 hover:bg-black/10 rounded-full transition-colors"
+              className="md:hidden p-2 hover:bg-black/10 rounded-full transition-colors active:scale-90"
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <Menu className="w-6 h-6 text-black" />
+              <Menu className="w-7 h-7 text-black" />
             </button>
 
             <Link href="/" className="flex items-center gap-2 group">
@@ -78,7 +95,7 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* BUSCA */}
+          {/* BUSCA DESKTOP */}
           <div className="hidden md:block flex-1 max-w-md mx-4">
             <div className="relative group">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-black/60 group-focus-within:text-gato-purple transition-colors">
@@ -93,7 +110,7 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* USUÁRIO */}
+          {/* USUÁRIO DESKTOP */}
           <div className="flex items-center gap-3">
             {mounted && isAuthenticated ? (
                 <>
@@ -104,10 +121,9 @@ export function Navbar() {
                         </div>
                     </Link>
 
-                    {/* LÓGICA DE CLIQUE NO AVATAR */}
                     <div className="relative">
                         <button 
-                            onClick={() => setIsProfileOpen(!isProfileOpen)} // Toggle
+                            onClick={() => setIsProfileOpen(!isProfileOpen)}
                             className="w-10 h-10 rounded-full bg-black p-0.5 shadow-md hover:scale-105 transition-all outline-none focus:ring-2 focus:ring-black/50"
                         >
                              <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center text-white text-xs font-bold overflow-hidden">
@@ -119,16 +135,10 @@ export function Navbar() {
                              </div>
                         </button>
                         
-                        {/* Dropdown Animado */}
                         <AnimatePresence>
                             {isProfileOpen && (
                                 <>
-                                    {/* Backdrop invisível para fechar ao clicar fora */}
-                                    <div 
-                                        className="fixed inset-0 z-30 cursor-default" 
-                                        onClick={() => setIsProfileOpen(false)} 
-                                    />
-                                    
+                                    <div className="fixed inset-0 z-30 cursor-default" onClick={() => setIsProfileOpen(false)} />
                                     <motion.div
                                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -149,10 +159,7 @@ export function Navbar() {
                                             <Link href="/perfil" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-yellow-50 text-black font-medium rounded-lg transition-colors">
                                                 <UserIcon className="w-4 h-4"/> Meu Perfil
                                             </Link>
-                                            <button 
-                                                onClick={() => { logout(); setIsProfileOpen(false); }} 
-                                                className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-red-600 font-medium rounded-lg transition-colors"
-                                            >
+                                            <button onClick={() => { logout(); setIsProfileOpen(false); }} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-red-600 font-medium rounded-lg transition-colors">
                                                 <LogOut className="w-4 h-4"/> Sair
                                             </button>
                                         </div>
@@ -172,61 +179,121 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* MENU MOBILE */}
+      {/* --- MENU MOBILE INOVADOR (DRAWER) --- */}
       <AnimatePresence>
         {isMobileMenuOpen && (
             <>
+                {/* Backdrop com Blur */}
                 <motion.div 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="fixed inset-0 bg-black/80 z-[60] backdrop-blur-sm md:hidden"
+                    className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-md md:hidden"
                 />
+                
+                {/* O Menu em Si */}
                 <motion.div 
-                    initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                    className="fixed top-0 left-0 bottom-0 w-4/5 max-w-xs bg-[#FFD700] z-[70] shadow-2xl md:hidden flex flex-col border-r-4 border-black"
+                    variants={menuVariants}
+                    initial="closed" animate="open" exit="closed"
+                    className="fixed top-0 left-0 bottom-0 w-[85%] max-w-sm bg-[#FFD700] z-[70] shadow-2xl md:hidden flex flex-col border-r-4 border-black overflow-hidden"
                 >
-                    <div className="p-5 flex justify-between items-center border-b-2 border-black">
-                        <span className="font-black text-xl text-black uppercase tracking-tighter">Gato Comics</span>
-                        <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-black text-[#FFD700] rounded-full hover:scale-110 transition-transform">
-                            <X className="w-5 h-5" />
+                    {/* Fundo Pontilhado dentro do menu também */}
+                    <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(black 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
+
+                    {/* HEADER DO MENU (PERFIL) */}
+                    <div className="relative p-6 bg-black text-[#FFD700] rounded-br-[40px] shadow-lg border-b-4 border-white/20">
+                        <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white">
+                            <X className="w-6 h-6" />
                         </button>
-                    </div>
 
-                    <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/50" />
-                            <input 
-                                type="text" 
-                                placeholder="Buscar..."
-                                onKeyDown={handleSearch}
-                                className="w-full bg-white border-2 border-black rounded-lg py-3 pl-10 pr-4 text-black placeholder:text-black/50 font-medium outline-none"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-3 bg-white/20 border-2 border-transparent hover:border-black rounded-lg font-bold text-black transition-all">
-                                Início
-                            </Link>
-                            <Link href="/comunidade" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-3 bg-white/20 border-2 border-transparent hover:border-black rounded-lg font-bold text-black transition-all">
-                                Comunidade
-                            </Link>
-                            <Link href="/loja" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-3 bg-white/20 border-2 border-transparent hover:border-black rounded-lg font-bold text-black transition-all">
-                                Loja de Patinhas
-                            </Link>
-                        </div>
-                    </div>
-                    
-                    <div className="p-4 bg-black">
-                        {isAuthenticated ? (
-                             <button onClick={() => {logout(); setIsMobileMenuOpen(false)}} className="w-full py-3 bg-[#FFD700] text-black rounded-lg font-black uppercase tracking-wider hover:bg-white transition-colors">
-                                Sair da Conta
-                             </button>
+                        {isAuthenticated && user ? (
+                            <motion.div variants={itemVariants} className="flex flex-col gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-[#FFD700] flex items-center justify-center text-2xl font-bold text-white uppercase shadow-lg overflow-hidden">
+                                         {user?.fullName?.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Caçador</p>
+                                        <p className="text-lg font-black text-white leading-tight">{user.fullName}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
+                                        <PawPrint className="w-4 h-4 text-[#FFD700]" />
+                                        <span className="font-bold text-white">{patinhas}</span>
+                                    </div>
+                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
+                                        <Zap className="w-4 h-4 text-green-400" />
+                                        <span className="font-bold text-white">VIP</span>
+                                    </div>
+                                </div>
+                            </motion.div>
                         ) : (
-                            <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block w-full py-3 bg-[#FFD700] text-black rounded-lg font-black uppercase tracking-wider text-center hover:bg-white transition-colors">
-                                Fazer Login
-                            </Link>
+                             <motion.div variants={itemVariants} className="py-4">
+                                <h2 className="text-2xl font-black text-white mb-1">BEM-VINDO!</h2>
+                                <p className="text-zinc-400 text-sm mb-4">Entre para sincronizar seu progresso.</p>
+                                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="inline-block bg-[#FFD700] text-black px-6 py-2.5 rounded-full font-bold shadow-lg hover:scale-105 transition-transform">
+                                    Fazer Login
+                                </Link>
+                             </motion.div>
                         )}
                     </div>
+
+                    {/* CORPO DO MENU (LINKS) */}
+                    <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10">
+                        
+                        {/* Busca Destacada */}
+                        <motion.div variants={itemVariants} className="relative shadow-sm">
+                            <input 
+                                type="text" 
+                                placeholder="O que vamos ler?"
+                                onKeyDown={handleSearch}
+                                className="w-full bg-white border-2 border-black rounded-xl py-4 pl-12 pr-4 text-black placeholder:text-black/40 font-bold outline-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:translate-x-[2px] focus:translate-y-[2px] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all"
+                            />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-black" />
+                        </motion.div>
+
+                        <div className="space-y-2">
+                            {[
+                                { href: "/", label: "Início", icon: PawPrint },
+                                { href: "/comunidade", label: "Comunidade", icon: Users },
+                                { href: "/loja", label: "Loja de Patinhas", icon: ShoppingBag },
+                                { href: "/perfil", label: "Meu Perfil", icon: UserIcon, auth: true },
+                            ].map((link) => (
+                                (!link.auth || isAuthenticated) && (
+                                    <motion.div key={link.href} variants={itemVariants}>
+                                        <Link 
+                                            href={link.href} 
+                                            onClick={() => setIsMobileMenuOpen(false)} 
+                                            className="group flex items-center justify-between p-3 rounded-xl hover:bg-black/5 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="bg-black/10 p-2 rounded-lg group-hover:bg-black group-hover:text-[#FFD700] transition-colors">
+                                                    <link.icon className="w-5 h-5" />
+                                                </div>
+                                                <span className="text-xl font-black text-black italic uppercase tracking-tighter group-hover:translate-x-1 transition-transform">
+                                                    {link.label}
+                                                </span>
+                                            </div>
+                                            <ChevronRight className="w-5 h-5 text-black/30 group-hover:text-black" />
+                                        </Link>
+                                    </motion.div>
+                                )
+                            ))}
+                        </div>
+
+                    </div>
+                    
+                    {/* FOOTER */}
+                    {isAuthenticated && (
+                        <motion.div variants={itemVariants} className="p-6 bg-black/5 border-t border-black/10 relative z-10">
+                             <button 
+                                onClick={() => {logout(); setIsMobileMenuOpen(false)}} 
+                                className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors shadow-lg"
+                             >
+                                <LogOut className="w-5 h-5" /> Sair da Conta
+                             </button>
+                        </motion.div>
+                    )}
                 </motion.div>
             </>
         )}
