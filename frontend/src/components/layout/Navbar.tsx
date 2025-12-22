@@ -3,15 +3,17 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ShoppingBag, Menu, PawPrint, LogOut, User as UserIcon, ShieldCheck, Users, X, Sparkles } from "lucide-react";
+import { Search, Menu, PawPrint, LogOut, User as UserIcon, ShieldCheck, Users, X, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUserStore } from "@/store/useUserStore";
 
 export function Navbar() {
   const router = useRouter();
   const { patinhas, isAuthenticated, user, logout } = useUserStore();
+  
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false); // <--- NOVO ESTADO
 
   useEffect(() => setMounted(true), []);
 
@@ -29,12 +31,12 @@ export function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 shadow-lg overflow-hidden border-b border-black/10">
+      <header className="fixed top-0 left-0 right-0 z-50 h-16 shadow-lg overflow-visible border-b border-black/10">
         
-        {/* --- CAMADA 1: FUNDO GRADIENTE ANIMADO --- */}
+        {/* --- CAMADA 1: FUNDO GRADIENTE --- */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FDB931] to-[#FFD700] animate-gradient-xy bg-[length:200%_200%]" />
         
-        {/* --- CAMADA 2: TEXTURA DE QUADRINHOS (PONTILHADO) --- */}
+        {/* --- CAMADA 2: TEXTURA --- */}
         <div 
             className="absolute inset-0 opacity-10 pointer-events-none" 
             style={{ 
@@ -43,29 +45,12 @@ export function Navbar() {
             }} 
         />
 
-        {/* --- CAMADA 3: BRILHOS/ESTRELAS FLUTUANTES --- */}
+        {/* --- CAMADA 3: BRILHOS --- */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <motion.div 
-                initial={{ opacity: 0, scale: 0 }} 
-                animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 0.5], x: [0, 20, -20], y: [0, -20, 0] }} 
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute top-2 left-[20%] text-white"
-            >
-                <Sparkles className="w-4 h-4 fill-white" />
-            </motion.div>
-            <motion.div 
-                initial={{ opacity: 0, scale: 0 }} 
-                animate={{ opacity: [0, 0.8, 0], scale: [0.8, 1, 0.8], x: [0, -30, 10] }} 
-                transition={{ duration: 4, repeat: Infinity, delay: 1, ease: "easeInOut" }}
-                className="absolute bottom-4 right-[30%] text-white"
-            >
-                <Sparkles className="w-3 h-3" />
-            </motion.div>
-            {/* Brilho que corre pela barra (Efeito de luz passando) */}
             <div className="absolute top-0 bottom-0 w-20 bg-white/20 skew-x-12 blur-xl animate-shine-slide" />
         </div>
 
-        {/* --- CONTEÚDO (Frente) --- */}
+        {/* --- CONTEÚDO --- */}
         <div className="container mx-auto h-full flex items-center justify-between px-4 md:px-6 relative z-10">
           
           {/* LOGO */}
@@ -119,8 +104,12 @@ export function Navbar() {
                         </div>
                     </Link>
 
-                    <div className="relative group cursor-pointer ml-1">
-                        <div className="w-10 h-10 rounded-full bg-black p-0.5 shadow-md group-hover:shadow-lg transition-all">
+                    {/* LÓGICA DE CLIQUE NO AVATAR */}
+                    <div className="relative">
+                        <button 
+                            onClick={() => setIsProfileOpen(!isProfileOpen)} // Toggle
+                            className="w-10 h-10 rounded-full bg-black p-0.5 shadow-md hover:scale-105 transition-all outline-none focus:ring-2 focus:ring-black/50"
+                        >
                              <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center text-white text-xs font-bold overflow-hidden">
                                 {user?.avatarUrl ? (
                                     <img src={user.avatarUrl} alt="User" className="w-full h-full object-cover" />
@@ -128,30 +117,49 @@ export function Navbar() {
                                     user?.fullName?.charAt(0) || <UserIcon className="w-4 h-4"/>
                                 )}
                              </div>
-                        </div>
+                        </button>
                         
-                        {/* Dropdown */}
-                        <div className="absolute right-0 top-full pt-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 w-56 transform origin-top-right group-hover:translate-y-0 translate-y-2">
-                             <div className="bg-white rounded-xl shadow-2xl border-2 border-black overflow-hidden text-black">
-                                <div className="px-4 py-3 border-b-2 border-black/5 bg-gray-50 flex flex-col gap-1">
-                                    <p className="text-xs text-gray-500 uppercase font-bold">Logado como</p>
-                                    <p className="text-sm font-black truncate">{user?.fullName}</p>
-                                </div>
-                                <div className="p-1">
-                                    {isAdminOrUploader && (
-                                        <Link href="/admin/dashboard" className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-purple-50 text-purple-700 font-bold rounded-lg transition-colors">
-                                            <ShieldCheck className="w-4 h-4"/> Painel Admin
-                                        </Link>
-                                    )}
-                                    <Link href="/perfil" className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-yellow-50 text-black font-medium rounded-lg transition-colors">
-                                        <UserIcon className="w-4 h-4"/> Meu Perfil
-                                    </Link>
-                                    <button onClick={() => logout()} className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-red-600 font-medium rounded-lg transition-colors">
-                                        <LogOut className="w-4 h-4"/> Sair
-                                    </button>
-                                </div>
-                             </div>
-                        </div>
+                        {/* Dropdown Animado */}
+                        <AnimatePresence>
+                            {isProfileOpen && (
+                                <>
+                                    {/* Backdrop invisível para fechar ao clicar fora */}
+                                    <div 
+                                        className="fixed inset-0 z-30 cursor-default" 
+                                        onClick={() => setIsProfileOpen(false)} 
+                                    />
+                                    
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="absolute right-0 top-full mt-3 w-56 z-40 bg-white rounded-xl shadow-2xl border-2 border-black overflow-hidden text-black"
+                                    >
+                                        <div className="px-4 py-3 border-b-2 border-black/5 bg-gray-50 flex flex-col gap-1">
+                                            <p className="text-xs text-gray-500 uppercase font-bold">Logado como</p>
+                                            <p className="text-sm font-black truncate">{user?.fullName}</p>
+                                        </div>
+                                        <div className="p-1 flex flex-col gap-1">
+                                            {isAdminOrUploader && (
+                                                <Link href="/admin/dashboard" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-purple-50 text-purple-700 font-bold rounded-lg transition-colors">
+                                                    <ShieldCheck className="w-4 h-4"/> Painel Admin
+                                                </Link>
+                                            )}
+                                            <Link href="/perfil" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-yellow-50 text-black font-medium rounded-lg transition-colors">
+                                                <UserIcon className="w-4 h-4"/> Meu Perfil
+                                            </Link>
+                                            <button 
+                                                onClick={() => { logout(); setIsProfileOpen(false); }} 
+                                                className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 text-red-600 font-medium rounded-lg transition-colors"
+                                            >
+                                                <LogOut className="w-4 h-4"/> Sair
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </>
             ) : mounted && (
