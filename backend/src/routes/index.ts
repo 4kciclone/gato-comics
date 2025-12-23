@@ -78,7 +78,7 @@ router.post('/works/:id/interaction', authMiddleware, workController.updateInter
 router.post('/comments', authMiddleware, commentController.create);
 
 // Leitura e Pagamento
-router.get('/chapters/:id/content', authMiddleware, chapterController.getContent);
+router.get('/chapters/:id/content', chapterController.getContent);
 router.post('/chapters/:id/unlock', authMiddleware, chapterController.unlock);
 router.post('/shop/checkout', authMiddleware, (req, res) => paymentController.createCheckoutSession(req, res));
 router.post('/shop/items/buy', authMiddleware, cosmeticController.buy);
