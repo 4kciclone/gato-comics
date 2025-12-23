@@ -1,33 +1,28 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken'; // Necessário para checagem manual
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
 export class ChapterController {
   
-  // ==========================================
-  // 1. OBTER CONTEÚDO (HÍBRIDO + NAVEGAÇÃO INTELIGENTE)
-  // ==========================================
+  // 1. OBTER CONTEÚDO + NAVEGAÇÃO
   async getContent(req: Request, res: Response) {
     try {
       const { id } = req.params;
       let userId: string | null = null;
 
-      // 1. Tenta identificar o usuário (Soft Auth)
-      // Não barra se falhar, apenas define userId como null
+      // 1. Identificar Usuário (Manual, sem middleware para não barrar visitantes)
       const authHeader = req.headers.authorization;
       if (authHeader) {
         try {
           const token = authHeader.split(' ')[1];
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
           userId = decoded.id;
-        } catch (e) {
-          // Token inválido/expirado, segue como visitante
-        }
+        } catch (e) { /* Token inválido, segue como visitante */ }
       }
 
-      // 2. Busca o capítulo atual
+      // 2. Buscar Capítulo Atual
       const chapter = await prisma.chapter.findUnique({ 
         where: { id },
         include: { work: true } 
@@ -35,73 +30,75 @@ export class ChapterController {
       
       if (!chapter) return res.status(404).json({ error: 'Capítulo não encontrado' });
 
-      // 3. Verifica Permissão de Leitura do ATUAL
-      // Se for pago E (não tem usuário OU usuário não comprou/aluguel venceu)
+      // 3. Verificar Acesso ao CONTEÚDO ATUAL
+      // (Se for pago e usuário não tiver acesso, bloqueia o array de imagens, mas retorna o resto para navegação)
+      let showImages = true;
       if (!chapter.isFree && chapter.price > 0) {
         let hasAccess = false;
-
         if (userId) {
           const unlock = await prisma.unlock.findUnique({
             where: { userId_chapterId: { userId, chapterId: id } }
           });
-          // Tem unlock E (é permanente OU data de expiração é futura)
           if (unlock && (!unlock.expiresAt || unlock.expiresAt > new Date())) {
             hasAccess = true;
           }
         }
-
-        if (!hasAccess) {
-          // Retorna erro 403 mas envia dados básicos para o front saber que existe
-          return res.status(403).json({ 
-            error: 'Capítulo Bloqueado',
-            chapter: { id: chapter.id, title: chapter.title, number: chapter.number, price: chapter.price }
-          });
-        }
+        if (!hasAccess) showImages = false;
       }
 
-      // 4. Busca Vizinhos (Anterior e Próximo)
-      // Usamos findFirst com ordenação para pegar o vizinho exato
-      const [prevChapter, nextChapter] = await Promise.all([
-        prisma.chapter.findFirst({
-          where: { workId: chapter.workId, number: { lt: chapter.number } },
-          orderBy: { number: 'desc' }, // O maior número menor que o atual (ex: atual 5 -> busca 4)
-          select: { id: true, price: true, isFree: true, number: true }
-        }),
-        prisma.chapter.findFirst({
-          where: { workId: chapter.workId, number: { gt: chapter.number } },
-          orderBy: { number: 'asc' }, // O menor número maior que o atual (ex: atual 5 -> busca 6)
-          select: { id: true, price: true, isFree: true, number: true }
-        })
-      ]);
+      // 4. Buscar Vizinhos (Anterior/Próximo)
+      const prevChapter = await prisma.chapter.findFirst({
+        where: { workId: chapter.workId, number: { lt: chapter.number } },
+        orderBy: { number: 'desc' },
+        select: { id: true, price: true, isFree: true, number: true, title: true }
+      });
 
-      // 5. Função para verificar se o vizinho está bloqueado para este usuário
+      const nextChapter = await prisma.chapter.findFirst({
+        where: { workId: chapter.workId, number: { gt: chapter.number } },
+        orderBy: { number: 'asc' },
+        select: { id: true, price: true, isFree: true, number: true, title: true }
+      });
+
+      // 5. Verificar se os vizinhos estão bloqueados (Para o botão de compra funcionar)
       const checkLock = async (chap: any) => {
         if (!chap) return null;
         
-        // Se for grátis, está liberado para todos
+        // Se for grátis, está liberado
         if (chap.isFree || chap.price === 0) {
-            return { id: chap.id, isLocked: false, price: 0, number: chap.number };
+            return { ...chap, isLocked: false };
         }
         
-        // Se for pago e visitante, está trancado
+        // Se for visitante, está trancado
         if (!userId) {
-            return { id: chap.id, isLocked: true, price: chap.price, number: chap.number };
+            return { ...chap, isLocked: true };
         }
 
-        // Se for pago e logado, checa se comprou
+        // Se logado, checa compra
         const unlock = await prisma.unlock.findUnique({
             where: { userId_chapterId: { userId, chapterId: chap.id } }
         });
         
         const hasAccess = unlock && (!unlock.expiresAt || unlock.expiresAt > new Date());
-        
-        return { id: chap.id, isLocked: !hasAccess, price: chap.price, number: chap.number };
+        return { ...chap, isLocked: !hasAccess };
       };
 
       const prevInfo = await checkLock(prevChapter);
       const nextInfo = await checkLock(nextChapter);
 
-      // 6. Retorna tudo
+      // Debug no Terminal da VPS (Para você ver se achou)
+      console.log(`[DEBUG] Cap ${chapter.number}. Prev: ${prevInfo?.number}, Next: ${nextInfo?.number}`);
+
+      // Se não tiver acesso às imagens, retorna erro 403 MAS com os dados de navegação
+      if (!showImages) {
+        return res.status(403).json({ 
+          error: 'Capítulo Bloqueado',
+          chapter: { id: chapter.id, title: chapter.title, number: chapter.number },
+          prev: prevInfo,
+          next: nextInfo
+        });
+      }
+
+      // Se tiver acesso, retorna tudo
       return res.json({ 
         pages: chapter.pages, 
         title: chapter.title,
@@ -116,12 +113,12 @@ export class ChapterController {
     }
   }
 
-  // 2. DESBLOQUEAR (Mantido igual, mas garantindo a lógica Lite)
+  // 2. DESBLOQUEAR
   async unlock(req: Request, res: Response) {
     try {
       const userId = req.userId!;
       const { id } = req.params;
-      const { method } = req.body; // 'premium' ou 'lite'
+      const { method } = req.body; 
 
       const result = await prisma.$transaction(async (tx) => {
         const chapter = await tx.chapter.findUnique({ where: { id } });
@@ -129,7 +126,6 @@ export class ChapterController {
 
         if (!chapter || !user) throw new Error('Dados inválidos');
 
-        // Verifica validade atual
         const existingUnlock = await tx.unlock.findUnique({
           where: { userId_chapterId: { userId, chapterId: id } }
         });
@@ -138,39 +134,22 @@ export class ChapterController {
            if (!existingUnlock.expiresAt || existingUnlock.expiresAt > new Date()) {
                return { success: true, message: 'Já possui acesso' };
            }
-           await tx.unlock.delete({ where: { id: existingUnlock.id } }); // Remove vencido
+           await tx.unlock.delete({ where: { id: existingUnlock.id } });
         }
 
         if (method === 'lite') {
             const cost = 2; 
             if (user.patinhasLite < cost) throw new Error('Saldo Lite insuficiente');
-
-            await tx.user.update({
-                where: { id: userId },
-                data: { patinhasLite: { decrement: cost } }
-            });
-
+            await tx.user.update({ where: { id: userId }, data: { patinhasLite: { decrement: cost } } });
             await tx.unlock.create({
-                data: { 
-                    userId, chapterId: id, type: 'RENTAL_AD',
-                    expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 Dias
-                }
+                data: { userId, chapterId: id, type: 'RENTAL_AD', expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) }
             });
             return { success: true, type: 'lite', newBalanceLite: user.patinhasLite - cost };
         } else {
             if (user.patinhasBalance < chapter.price) throw new Error('Saldo insuficiente');
-
-            await tx.user.update({
-                where: { id: userId },
-                data: { patinhasBalance: { decrement: chapter.price } }
-            });
-
+            await tx.user.update({ where: { id: userId }, data: { patinhasBalance: { decrement: chapter.price } } });
             await tx.unlock.create({ data: { userId, chapterId: id, type: 'PERMANENT' } });
-            
-            await tx.transaction.create({
-                data: { userId, type: 'SPENT_CHAPTER', amount: -chapter.price, referenceId: chapter.id }
-            });
-
+            await tx.transaction.create({ data: { userId, type: 'SPENT_CHAPTER', amount: -chapter.price, referenceId: chapter.id } });
             return { success: true, type: 'premium', newBalance: user.patinhasBalance - chapter.price };
         }
       });
@@ -181,7 +160,7 @@ export class ChapterController {
     }
   }
 
-  // ... (create e delete iguais)
+  // 3. CRIAR (Admin)
   async create(req: Request, res: Response) {
     try {
       const { workId } = req.params;
@@ -193,6 +172,7 @@ export class ChapterController {
     } catch (error) { return res.status(500).json({ error: 'Erro create' }); }
   }
 
+  // 4. DELETAR
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
