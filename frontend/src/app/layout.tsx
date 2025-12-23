@@ -24,7 +24,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-gato-black text-gato-ghost antialiased`}>
         <Navbar />
         {/* Padding top para compensar a navbar fixa */}
-        <main className="pt-24">
+        <main className="pt-16">
           {children}
         </main>
       </body>
