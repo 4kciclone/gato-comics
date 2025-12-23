@@ -2,11 +2,7 @@
 
 import React, { useState, useEffect, use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  ArrowLeft, ChevronLeft, ChevronRight, Loader2, MessageSquare, 
-  Crown, Zap, Lock as LockIcon 
-} from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, MessageSquare, Crown, Zap, Lock as LockIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useUserStore } from "@/store/useUserStore";
@@ -22,9 +18,8 @@ interface NeighborChapter {
 export default function ReaderPage({ params }: { params: Promise<{ mangaId: string; chapterId: string }> }) {
   const { mangaId, chapterId } = use(params);
   const router = useRouter();
-  const { patinhas, addPatinhas, isAuthenticated } = useUserStore();
+  const { patinhas, isAuthenticated } = useUserStore(); // Removemos addPatinhas, vamos atualizar direto o state
 
-  // Estados
   const [pages, setPages] = useState<string[]>([]);
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterNumber, setChapterNumber] = useState("");
@@ -33,7 +28,7 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
   const [next, setNext] = useState<NeighborChapter | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [isCurrentLocked, setIsCurrentLocked] = useState(false); // Novo estado
+  const [isCurrentLocked, setIsCurrentLocked] = useState(false);
   const [showUI, setShowUI] = useState(true);
 
   // Modal Compra
@@ -42,12 +37,12 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
   const [processingPurchase, setProcessingPurchase] = useState(false);
   const [myLiteBalance, setMyLiteBalance] = useState(0);
 
-  // View Tracker
+  // 1. Registrar View
   useEffect(() => {
     if (mangaId) api.post(`/works/${mangaId}/view`).catch(console.error);
   }, [mangaId, chapterId]);
 
-  // Fetch Data
+  // 2. Buscar Capítulo (e Saldo Lite atualizado)
   useEffect(() => {
     async function fetchPages() {
       setLoading(true);
@@ -55,39 +50,37 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
       setPages([]);
       
       try {
+        // Busca saldo atualizado
+        if (isAuthenticated) {
+            const profileRes = await api.get('/auth/profile');
+            setMyLiteBalance(profileRes.data.patinhasLite || 0);
+            // Atualiza também o saldo premium global para garantir sincronia
+            useUserStore.setState({ patinhas: profileRes.data.patinhasBalance });
+        }
+
         const res = await api.get(`/chapters/${chapterId}/content`);
         
-        // Dados do Capítulo
         if (res.data.pages) setPages(res.data.pages);
         setChapterTitle(res.data.title || "");
         setChapterNumber(res.data.number);
-        
-        // Dados de Navegação
         setPrev(res.data.prev);
         setNext(res.data.next);
 
-        // Saldo Lite
-        if (isAuthenticated) {
-            api.get('/auth/profile').then(r => setMyLiteBalance(r.data.patinhasLite || 0));
-        }
-
       } catch (err: any) {
-        // Se for erro 403, significa que existe, mas está bloqueado.
-        // A API agora retorna os dados de navegação (prev/next) junto com o erro 403.
         if (err.response?.status === 403 && err.response?.data?.chapter) {
             setIsCurrentLocked(true);
-            setChapterNumber(err.response.data.chapter.number);
-            setPrev(err.response.data.prev);
-            setNext(err.response.data.next);
+            const data = err.response.data;
+            setChapterNumber(data.chapter.number);
+            setPrev(data.prev);
+            setNext(data.next);
             
-            // Define o capítulo atual como alvo para compra imediata
             setTargetChapter({
-                id: err.response.data.chapter.id,
-                price: err.response.data.chapter.price,
-                number: err.response.data.chapter.number,
+                id: data.chapter.id,
+                price: data.chapter.price,
+                number: data.chapter.number,
                 isLocked: true
             });
-            setShowModal(true); // Abre modal na cara
+            // Não abre modal automático para não ser intrusivo, mostra a tela de bloqueio
         } else {
             console.error(err);
         }
@@ -98,7 +91,7 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
     fetchPages();
   }, [chapterId, isAuthenticated]);
 
-  // Ações
+  // --- NAVEGAÇÃO / COMPRA ---
   const handleNav = (neighbor: NeighborChapter | null) => {
     if (!neighbor) return;
 
@@ -117,17 +110,25 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
     setProcessingPurchase(true);
     try {
       const response = await api.post(`/chapters/${targetChapter.id}/unlock`, { method });
+      
       if (response.data.success) {
-        if (method === 'premium' && response.data.newBalance !== undefined) {
-             addPatinhas(response.data.newBalance - patinhas);
-        } else if (method === 'lite') {
+        // ATUALIZAÇÃO CRÍTICA DE SALDO
+        // O backend agora retorna os saldos finais exatos
+        if (response.data.newBalancePremium !== undefined) {
+             useUserStore.setState({ patinhas: response.data.newBalancePremium });
+        }
+        if (response.data.newBalanceLite !== undefined) {
              setMyLiteBalance(response.data.newBalanceLite);
         }
+
         setShowModal(false);
-        // Se comprou o atual, recarrega. Se comprou o próximo, navega.
+        alert("Capítulo desbloqueado!");
+
+        // Se comprou o atual (que estava bloqueado na tela), recarrega
         if (targetChapter.id === chapterId) {
             window.location.reload();
         } else {
+            // Se comprou o próximo, vai pra ele
             router.push(`/leitor/${mangaId}/${targetChapter.id}`);
         }
       }
@@ -163,28 +164,34 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
       {/* ÁREA PRINCIPAL */}
       <div onClick={() => setShowUI(!showUI)} className="w-full max-w-4xl mx-auto flex flex-col items-center bg-black min-h-screen pb-10">
         
-        {/* CASO: CAPÍTULO BLOQUEADO */}
         {isCurrentLocked ? (
-            <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-                <LockIcon className="w-16 h-16 text-gato-amber opacity-50" />
-                <h2 className="text-2xl font-bold">Conteúdo Bloqueado</h2>
-                <p className="text-zinc-500">Adquira este capítulo para ler.</p>
-                <button onClick={() => setShowModal(true)} className="bg-gato-purple px-6 py-2 rounded-full font-bold">
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-6 p-4 text-center">
+                <div className="bg-zinc-900 p-6 rounded-full border-2 border-gato-amber/30">
+                    <LockIcon className="w-12 h-12 text-gato-amber" />
+                </div>
+                <div>
+                    <h2 className="text-2xl font-bold text-white">Capítulo Bloqueado</h2>
+                    <p className="text-zinc-500 mt-2">Você precisa desbloquear para continuar lendo.</p>
+                </div>
+                <button 
+                    onClick={() => { setTargetChapter({ id: chapterId, price: 1, isLocked: true, number: Number(chapterNumber) }); setShowModal(true); }} 
+                    className="bg-gato-purple hover:bg-gato-purple/90 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-gato-purple/20 transition-all active:scale-95"
+                >
                     Desbloquear Agora
                 </button>
             </div>
         ) : (
-            // CASO: CAPÍTULO LIBERADO
             pages.map((src, index) => (
                 <img key={index} src={src} alt={`Página ${index + 1}`} className="w-full h-auto block select-none" loading="lazy" style={{ display: 'block' }} />
             ))
         )}
       </div>
 
-      {/* RODAPÉ (Navegação sempre visível) */}
+      {/* RODAPÉ */}
       <div className="max-w-4xl mx-auto px-4 pb-20 space-y-12">
         <div className="py-10 text-center border-b border-white/5">
             <div className="flex flex-col md:flex-row justify-center gap-4">
+              
               {/* ANTERIOR */}
               <button 
                   onClick={() => handleNav(prev)}
@@ -196,7 +203,7 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
                     }`}
               >
                   {prev?.isLocked ? <LockIcon className="w-4 h-4"/> : <ChevronLeft className="w-4 h-4"/>} 
-                  Anterior {prev?.isLocked ? "(Pago)" : ""}
+                  Anterior {prev?.isLocked ? "(Bloqueado)" : ""}
               </button>
               
               {/* PRÓXIMO */}
@@ -216,7 +223,6 @@ export default function ReaderPage({ params }: { params: Promise<{ mangaId: stri
             </div>
         </div>
 
-        {/* COMENTÁRIOS */}
         {!isCurrentLocked && (
             <div className="bg-zinc-900/20 rounded-2xl border border-white/5 p-4 md:p-8">
                 <div className="flex items-center gap-2 mb-6"><MessageSquare className="w-5 h-5 text-gato-purple"/><h3 className="text-xl font-bold">Comentários</h3></div>

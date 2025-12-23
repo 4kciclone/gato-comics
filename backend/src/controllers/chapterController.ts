@@ -12,17 +12,23 @@ export class ChapterController {
       const { id } = req.params;
       let userId: string | null = null;
 
-      // 1. Identificar Usuário (Manual, sem middleware para não barrar visitantes)
+      // --- CORREÇÃO: Extração de Token Mais Robusta ---
       const authHeader = req.headers.authorization;
       if (authHeader) {
         try {
-          const token = authHeader.split(' ')[1];
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
-          userId = decoded.id;
-        } catch (e) { /* Token inválido, segue como visitante */ }
+          // Aceita "Bearer TOKEN" ou apenas "TOKEN"
+          const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+          if (token && token !== 'null' && token !== 'undefined') {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+            userId = decoded.id;
+          }
+        } catch (e) {
+          console.log("Token inválido no getContent:", e);
+        }
       }
+      // ------------------------------------------------
 
-      // 2. Buscar Capítulo Atual
+      // Busca o capítulo
       const chapter = await prisma.chapter.findUnique({ 
         where: { id },
         include: { work: true } 
@@ -30,23 +36,33 @@ export class ChapterController {
       
       if (!chapter) return res.status(404).json({ error: 'Capítulo não encontrado' });
 
-      // 3. Verificar Acesso ao CONTEÚDO ATUAL
-      // (Se for pago e usuário não tiver acesso, bloqueia o array de imagens, mas retorna o resto para navegação)
+      // Lógica de Permissão
       let showImages = true;
+      let accessType = 'FREE';
+
       if (!chapter.isFree && chapter.price > 0) {
         let hasAccess = false;
         if (userId) {
           const unlock = await prisma.unlock.findUnique({
             where: { userId_chapterId: { userId, chapterId: id } }
           });
-          if (unlock && (!unlock.expiresAt || unlock.expiresAt > new Date())) {
-            hasAccess = true;
+          
+          if (unlock) {
+            // Verifica validade
+            if (!unlock.expiresAt || new Date(unlock.expiresAt) > new Date()) {
+                hasAccess = true;
+                accessType = unlock.type; // PERMANENT ou RENTAL_AD
+            } else {
+                // Expirou (Lite)
+                // Opcional: Deletar o unlock expirado aqui para limpar o banco
+                // await prisma.unlock.delete({ where: { id: unlock.id } });
+            }
           }
         }
         if (!hasAccess) showImages = false;
       }
 
-      // 4. Buscar Vizinhos (Anterior/Próximo)
+      // Vizinhos
       const prevChapter = await prisma.chapter.findFirst({
         where: { workId: chapter.workId, number: { lt: chapter.number } },
         orderBy: { number: 'desc' },
@@ -59,53 +75,39 @@ export class ChapterController {
         select: { id: true, price: true, isFree: true, number: true, title: true }
       });
 
-      // 5. Verificar se os vizinhos estão bloqueados (Para o botão de compra funcionar)
+      // Checa bloqueio dos vizinhos
       const checkLock = async (chap: any) => {
         if (!chap) return null;
-        
-        // Se for grátis, está liberado
-        if (chap.isFree || chap.price === 0) {
-            return { ...chap, isLocked: false };
-        }
-        
-        // Se for visitante, está trancado
-        if (!userId) {
-            return { ...chap, isLocked: true };
-        }
+        if (chap.isFree || chap.price === 0) return { ...chap, isLocked: false };
+        if (!userId) return { ...chap, isLocked: true };
 
-        // Se logado, checa compra
         const unlock = await prisma.unlock.findUnique({
             where: { userId_chapterId: { userId, chapterId: chap.id } }
         });
         
-        const hasAccess = unlock && (!unlock.expiresAt || unlock.expiresAt > new Date());
+        const hasAccess = unlock && (!unlock.expiresAt || new Date(unlock.expiresAt) > new Date());
         return { ...chap, isLocked: !hasAccess };
       };
 
       const prevInfo = await checkLock(prevChapter);
       const nextInfo = await checkLock(nextChapter);
 
-      // Debug no Terminal da VPS (Para você ver se achou)
-      console.log(`[DEBUG] Cap ${chapter.number}. Prev: ${prevInfo?.number}, Next: ${nextInfo?.number}`);
-
-      // Se não tiver acesso às imagens, retorna erro 403 MAS com os dados de navegação
-      if (!showImages) {
-        return res.status(403).json({ 
-          error: 'Capítulo Bloqueado',
-          chapter: { id: chapter.id, title: chapter.title, number: chapter.number },
-          prev: prevInfo,
-          next: nextInfo
-        });
-      }
-
-      // Se tiver acesso, retorna tudo
-      return res.json({ 
-        pages: chapter.pages, 
+      const responseData = { 
         title: chapter.title,
         number: chapter.number,
         prev: prevInfo, 
-        next: nextInfo
-      });
+        next: nextInfo,
+        pages: showImages ? chapter.pages : [] // Só manda páginas se tiver acesso
+      };
+
+      if (!showImages) {
+        return res.status(403).json({ 
+            error: 'Capítulo Bloqueado', 
+            ...responseData
+        });
+      }
+
+      return res.json(responseData);
 
     } catch (error) {
       console.error(error);
@@ -126,31 +128,53 @@ export class ChapterController {
 
         if (!chapter || !user) throw new Error('Dados inválidos');
 
+        // Limpeza de desbloqueios expirados ou existentes
         const existingUnlock = await tx.unlock.findUnique({
           where: { userId_chapterId: { userId, chapterId: id } }
         });
         
         if (existingUnlock) {
-           if (!existingUnlock.expiresAt || existingUnlock.expiresAt > new Date()) {
-               return { success: true, message: 'Já possui acesso' };
+           // Se for permanente, ou se for aluguel que AINDA vale, não cobra de novo
+           if (!existingUnlock.expiresAt || new Date(existingUnlock.expiresAt) > new Date()) {
+               return { success: true, message: 'Já possui acesso', alreadyOwned: true };
            }
+           // Se expirou, apaga para criar o novo
            await tx.unlock.delete({ where: { id: existingUnlock.id } });
         }
 
         if (method === 'lite') {
             const cost = 2; 
             if (user.patinhasLite < cost) throw new Error('Saldo Lite insuficiente');
-            await tx.user.update({ where: { id: userId }, data: { patinhasLite: { decrement: cost } } });
-            await tx.unlock.create({
-                data: { userId, chapterId: id, type: 'RENTAL_AD', expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) }
+
+            const updatedUser = await tx.user.update({
+                where: { id: userId },
+                data: { patinhasLite: { decrement: cost } }
             });
-            return { success: true, type: 'lite', newBalanceLite: user.patinhasLite - cost };
+
+            await tx.unlock.create({
+                data: { 
+                    userId, chapterId: id, type: 'RENTAL_AD', 
+                    expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 Dias
+                }
+            });
+            // Retorna os saldos ATUAIS para o front atualizar
+            return { success: true, type: 'lite', newBalanceLite: updatedUser.patinhasLite, newBalancePremium: updatedUser.patinhasBalance };
+        
         } else {
             if (user.patinhasBalance < chapter.price) throw new Error('Saldo insuficiente');
-            await tx.user.update({ where: { id: userId }, data: { patinhasBalance: { decrement: chapter.price } } });
+
+            const updatedUser = await tx.user.update({
+                where: { id: userId },
+                data: { patinhasBalance: { decrement: chapter.price } }
+            });
+
             await tx.unlock.create({ data: { userId, chapterId: id, type: 'PERMANENT' } });
-            await tx.transaction.create({ data: { userId, type: 'SPENT_CHAPTER', amount: -chapter.price, referenceId: chapter.id } });
-            return { success: true, type: 'premium', newBalance: user.patinhasBalance - chapter.price };
+            
+            await tx.transaction.create({
+                data: { userId, type: 'SPENT_CHAPTER', amount: -chapter.price, referenceId: chapter.id }
+            });
+
+            return { success: true, type: 'premium', newBalanceLite: updatedUser.patinhasLite, newBalancePremium: updatedUser.patinhasBalance };
         }
       });
       return res.json(result);
@@ -160,26 +184,7 @@ export class ChapterController {
     }
   }
 
-  // 3. CRIAR (Admin)
-  async create(req: Request, res: Response) {
-    try {
-      const { workId } = req.params;
-      const { number, title, price, pages } = req.body;
-      const chapter = await prisma.chapter.create({
-        data: { workId, number: parseFloat(number), title, price: parseInt(price), isFree: parseInt(price) === 0, pages: pages || [] }
-      });
-      return res.status(201).json(chapter);
-    } catch (error) { return res.status(500).json({ error: 'Erro create' }); }
-  }
-
-  // 4. DELETAR
-  async delete(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      await prisma.unlock.deleteMany({ where: { chapterId: id } });
-      await prisma.comment.deleteMany({ where: { chapterId: id } });
-      await prisma.chapter.delete({ where: { id } });
-      return res.json({ success: true });
-    } catch (error) { return res.status(500).json({ error: 'Erro delete' }); }
-  }
+  // ... (Create e Delete continuam iguais)
+  async create(req: Request, res: Response) { try { const { workId } = req.params; const { number, title, price, pages } = req.body; const chapter = await prisma.chapter.create({ data: { workId, number: parseFloat(number), title, price: parseInt(price), isFree: parseInt(price) === 0, pages: pages || [] } }); return res.status(201).json(chapter); } catch (error) { return res.status(500).json({ error: 'Erro ao criar capítulo' }); } }
+  async delete(req: Request, res: Response) { try { const { id } = req.params; await prisma.unlock.deleteMany({ where: { chapterId: id } }); await prisma.comment.deleteMany({ where: { chapterId: id } }); await prisma.chapter.delete({ where: { id } }); return res.json({ success: true }); } catch (error) { return res.status(500).json({ error: 'Erro ao deletar capítulo' }); } }
 }
