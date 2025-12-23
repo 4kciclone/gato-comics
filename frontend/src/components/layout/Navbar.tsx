@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image"; // <--- IMPORTANTE: Importar o componente de imagem
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { 
   Search, Menu, PawPrint, LogOut, User as UserIcon, 
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useUserStore } from "@/store/useUserStore";
-import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer";
 
 export function Navbar() {
   const router = useRouter();
@@ -49,19 +48,13 @@ export function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-24 shadow-lg overflow-visible border-b border-black/10">
+      <header className="fixed top-0 left-0 right-0 z-50 h-16 md:h-24 shadow-lg overflow-visible border-b border-black/10 transition-all duration-300">
         
         {/* --- CAMADA 1: FUNDO GRADIENTE --- */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FDB931] to-[#FFD700] animate-gradient-xy bg-[length:200%_200%]" />
         
         {/* --- CAMADA 2: TEXTURA --- */}
-        <div 
-            className="absolute inset-0 opacity-10 pointer-events-none" 
-            style={{ 
-                backgroundImage: 'radial-gradient(black 1px, transparent 1px)', 
-                backgroundSize: '20px 20px' 
-            }} 
-        />
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(black 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
 
         {/* --- CAMADA 3: BRILHOS --- */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -71,59 +64,64 @@ export function Navbar() {
         {/* --- CONTEÚDO --- */}
         <div className="container mx-auto h-full flex items-center justify-between px-4 md:px-6 relative z-10">
           
-          {/* LOGO E MENU HAMBURGUER (ESQUERDA) */}
-          <div className="flex items-center gap-4">
+          {/* LADO ESQUERDO: MENU + LOGO */}
+          <div className="flex items-center gap-3 md:gap-6">
             <button 
-              className="md:hidden p-2 hover:bg-black/10 rounded-full transition-colors active:scale-90"
+              className="md:hidden p-2 bg-black/10 hover:bg-black/20 rounded-lg transition-colors active:scale-95"
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <Menu className="w-7 h-7 text-black" />
+              <Menu className="w-6 h-6 text-black" />
             </button>
 
-            {/* --- ATUALIZAÇÃO DA LOGO AQUI (DESKTOP) --- */}
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="relative h-20 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+              {/* LOGO RESPONSIVA: Menor no mobile, Grande no Desktop */}
+              <div className="relative h-8 w-auto md:h-16 aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
                  <Image 
-                    src="/logo.png" // Certifique-se que o arquivo está em public/logo.png
+                    src="/logo.png" 
                     alt="Gato Comics"
-                    width={150} // Largura base para otimização
-                    height={50} // Altura base
-                    className="h-full w-auto object-contain drop-shadow-md"
+                    width={200}
+                    height={80}
+                    className="h-full w-auto object-contain drop-shadow-sm"
                     priority
                  />
               </div>
             </Link>
-            {/* ------------------------------------------- */}
 
-            <div className="hidden md:flex items-center gap-6 ml-6">
+            {/* LINKS DESKTOP APENAS */}
+            <div className="hidden lg:flex items-center gap-6 ml-4 border-l-2 border-black/10 pl-6">
                 <Link href="/comunidade" className="flex items-center gap-2 text-sm font-bold text-black/70 hover:text-black transition-colors uppercase tracking-wide hover:scale-105 transform duration-200">
                     <Users className="w-4 h-4" /> Comunidade
                 </Link>
             </div>
           </div>
 
-          {/* BUSCA DESKTOP */}
-          <div className="hidden md:block flex-1 max-w-md mx-4">
+          {/* CENTRO: BUSCA (Apenas Desktop) */}
+          <div className="hidden md:block flex-1 max-w-md mx-8">
             <div className="relative group">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-black/60 group-focus-within:text-gato-purple transition-colors">
-                    <Search className="w-4 h-4" />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-black/60 group-focus-within:text-gato-purple transition-colors">
+                    <Search className="w-5 h-5" />
                 </div>
                 <input 
                     type="text" 
-                    placeholder="Buscar obras..."
+                    placeholder="O que vamos ler hoje?"
                     onKeyDown={handleSearch}
-                    className="w-full bg-white/40 hover:bg-white/60 focus:bg-white border-2 border-transparent focus:border-black rounded-full py-2 pl-10 pr-4 text-sm text-black placeholder:text-black/50 outline-none shadow-sm transition-all duration-300"
+                    className="w-full bg-white/50 hover:bg-white/80 focus:bg-white border-2 border-transparent focus:border-black rounded-full py-2.5 pl-12 pr-4 text-sm text-black placeholder:text-black/50 font-medium outline-none shadow-sm transition-all duration-300"
                 />
             </div>
           </div>
 
-          {/* USUÁRIO DESKTOP */}
-          <div className="flex items-center gap-3">
+          {/* LADO DIREITO: USUÁRIO */}
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Botão de Busca Mobile (Abre Menu) */}
+            <button className="md:hidden p-2 hover:bg-black/10 rounded-full" onClick={() => setIsMobileMenuOpen(true)}>
+                <Search className="w-6 h-6 text-black" />
+            </button>
+
             {mounted && isAuthenticated ? (
                 <>
                     <Link href="/loja">
-                        <div className="flex items-center gap-1.5 bg-black text-[#FFD700] px-3 py-1.5 rounded-full font-bold text-sm hover:scale-105 hover:shadow-[0_0_15px_rgba(0,0,0,0.3)] transition-all cursor-pointer border-2 border-black">
-                            <PawPrint className="w-3 h-3 fill-current animate-pulse" />
+                        <div className="flex items-center gap-1.5 bg-black text-[#FFD700] px-3 py-1.5 md:px-4 md:py-2 rounded-full font-bold text-xs md:text-sm hover:scale-105 hover:shadow-lg transition-all cursor-pointer border-2 border-black">
+                            <PawPrint className="w-3 h-3 md:w-4 md:h-4 fill-current animate-pulse" />
                             <span>{patinhas}</span>
                         </div>
                     </Link>
@@ -131,7 +129,7 @@ export function Navbar() {
                     <div className="relative">
                         <button 
                             onClick={() => setIsProfileOpen(!isProfileOpen)}
-                            className="w-10 h-10 rounded-full bg-black p-0.5 shadow-md hover:scale-105 transition-all outline-none focus:ring-2 focus:ring-black/50"
+                            className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-black p-0.5 shadow-md hover:scale-105 transition-all outline-none focus:ring-2 focus:ring-black/50"
                         >
                              <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center text-white text-xs font-bold overflow-hidden">
                                 {user?.avatarUrl ? (
@@ -177,7 +175,7 @@ export function Navbar() {
                     </div>
                 </>
             ) : mounted && (
-                <Link href="/login" className="bg-black text-[#FFD700] hover:bg-zinc-800 px-6 py-2 rounded-full font-black text-sm transition-all shadow-md hover:shadow-lg border-2 border-transparent hover:border-[#FFD700]">
+                <Link href="/login" className="bg-black text-[#FFD700] hover:bg-zinc-800 px-4 py-1.5 md:px-6 md:py-2 rounded-full font-black text-xs md:text-sm transition-all shadow-md hover:shadow-lg border-2 border-transparent hover:border-[#FFD700]">
                     Entrar
                 </Link>
             )}
@@ -186,14 +184,14 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* --- MENU MOBILE INOVADOR (DRAWER) --- */}
+      {/* --- MENU MOBILE (DRAWER) --- */}
       <AnimatePresence>
         {isMobileMenuOpen && (
             <>
                 <motion.div 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-md md:hidden"
+                    className="fixed inset-0 bg-black/80 z-[60] backdrop-blur-md md:hidden"
                 />
                 
                 <motion.div 
@@ -203,53 +201,33 @@ export function Navbar() {
                 >
                     <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(black 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
 
-                    {/* HEADER DO MENU (PERFIL/LOGO) */}
+                    {/* Header do Menu */}
                     <div className="relative p-6 bg-black text-[#FFD700] rounded-br-[40px] shadow-lg border-b-4 border-white/20">
                         <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white">
                             <X className="w-6 h-6" />
                         </button>
 
-                        {isAuthenticated && user ? (
-                            <motion.div variants={itemVariants} className="flex flex-col gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-[#FFD700] flex items-center justify-center text-2xl font-bold text-white uppercase shadow-lg overflow-hidden">
-                                         {user?.fullName?.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Caçador</p>
-                                        <p className="text-lg font-black text-white leading-tight">{user.fullName}</p>
-                                    </div>
+                        <motion.div variants={itemVariants} className="pt-4">
+                            {/* Logo no Menu também */}
+                            <div className="mb-4">
+                                <Image 
+                                    src="/logo.png" 
+                                    alt="Gato Comics"
+                                    width={160}
+                                    height={60}
+                                    className="object-contain"
+                                />
+                            </div>
+                            
+                            {isAuthenticated && user ? (
+                                <div>
+                                    <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Bem-vindo,</p>
+                                    <p className="text-lg font-black text-white leading-tight">{user.fullName}</p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
-                                        <PawPrint className="w-4 h-4 text-[#FFD700]" />
-                                        <span className="font-bold text-white">{patinhas}</span>
-                                    </div>
-                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
-                                        <Zap className="w-4 h-4 text-green-400" />
-                                        <span className="font-bold text-white">VIP</span>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ) : (
-                             <motion.div variants={itemVariants} className="py-4">
-                                {/* --- ATUALIZAÇÃO DA LOGO NO MOBILE --- */}
-                                <div className="mb-4">
-                                    <Image 
-                                        src="/logo.png" 
-                                        alt="Gato Comics"
-                                        width={280}
-                                        height={90}
-                                        className="object-contain"
-                                    />
-                                </div>
-                                {/* ------------------------------------- */}
-                                <p className="text-zinc-400 text-sm mb-4">Entre para sincronizar seu progresso.</p>
-                                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="inline-block bg-[#FFD700] text-black px-6 py-2.5 rounded-full font-bold shadow-lg hover:scale-105 transition-transform">
-                                    Fazer Login
-                                </Link>
-                             </motion.div>
-                        )}
+                            ) : (
+                                <p className="text-zinc-400 text-sm">Entre para sincronizar seu progresso.</p>
+                            )}
+                        </motion.div>
                     </div>
 
                     <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10">
@@ -293,16 +271,18 @@ export function Navbar() {
                         </div>
                     </div>
                     
-                    {isAuthenticated && (
-                        <motion.div variants={itemVariants} className="p-6 bg-black/5 border-t border-black/10 relative z-10">
-                             <button 
-                                onClick={() => {logout(); setIsMobileMenuOpen(false)}} 
-                                className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors shadow-lg"
-                             >
+                    {/* Footer Menu */}
+                    <div className="p-6 bg-black/5 border-t border-black/10 relative z-10">
+                        {isAuthenticated ? (
+                             <button onClick={() => {logout(); setIsMobileMenuOpen(false)}} className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors shadow-lg">
                                 <LogOut className="w-5 h-5" /> Sair da Conta
                              </button>
-                        </motion.div>
-                    )}
+                        ) : (
+                            <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block w-full py-4 bg-black text-[#FFD700] rounded-xl font-black uppercase tracking-wider text-center hover:scale-[1.02] transition-transform shadow-lg">
+                                Fazer Login
+                            </Link>
+                        )}
+                    </div>
                 </motion.div>
             </>
         )}
