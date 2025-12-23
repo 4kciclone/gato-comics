@@ -49,7 +49,7 @@ export function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 shadow-lg overflow-visible border-b border-black/10">
+      <header className="fixed top-0 left-0 right-0 z-50 h-24 shadow-lg overflow-visible border-b border-black/10">
         
         {/* --- CAMADA 1: FUNDO GRADIENTE --- */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#FFD700] via-[#FDB931] to-[#FFD700] animate-gradient-xy bg-[length:200%_200%]" />
@@ -82,7 +82,7 @@ export function Navbar() {
 
             {/* --- ATUALIZAÇÃO DA LOGO AQUI (DESKTOP) --- */}
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="relative h-10 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+              <div className="relative h-20 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
                  <Image 
                     src="/logo.png" // Certifique-se que o arquivo está em public/logo.png
                     alt="Gato Comics"
@@ -238,8 +238,8 @@ export function Navbar() {
                                     <Image 
                                         src="/logo.png" 
                                         alt="Gato Comics"
-                                        width={140}
-                                        height={45}
+                                        width={280}
+                                        height={90}
                                         className="object-contain"
                                     />
                                 </div>
