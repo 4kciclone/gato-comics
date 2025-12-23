@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken'; // Necessário para decodificar o token manualmente na rota híbrida
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
@@ -57,23 +57,22 @@ export class WorkController {
     try {
       let userId = null;
 
-      // Tenta extrair o token manualmente para personalizar (Soft Auth)
+      // Soft Auth: Tenta ler o token mas não barra se falhar
       const authHeader = req.headers.authorization;
       if (authHeader) {
-        const token = authHeader.split(' ')[1];
         try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
-          userId = decoded.id;
-        } catch (e) {
-          // Token inválido ou expirado, segue como visitante
-        }
+          const token = authHeader.split(' ')[1];
+          if (token && token !== 'null') {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+            userId = decoded.id;
+          }
+        } catch (e) { /* Token inválido, segue como visitante */ }
       }
 
       let recommendedWorks: any[] = [];
 
-      // 1. LÓGICA PERSONALIZADA (Se logado)
+      // 1. Lógica Personalizada (Se logado)
       if (userId) {
-        // Busca obras que o usuário interagiu (Library)
         const userLibrary = await prisma.userLibrary.findMany({
             where: { userId },
             include: { work: { select: { tags: true, id: true } } },
@@ -81,11 +80,9 @@ export class WorkController {
         });
 
         if (userLibrary.length > 0) {
-            // Pega tags preferidas
             const tags = Array.from(new Set(userLibrary.flatMap(ul => ul.work.tags)));
             const readIds = userLibrary.map(ul => ul.work.id);
 
-            // Busca obras similares não lidas
             recommendedWorks = await prisma.work.findMany({
                 where: {
                     tags: { hasSome: tags },
@@ -102,13 +99,12 @@ export class WorkController {
         }
       }
 
-      // 2. FALLBACK (Populares/Recentes)
-      // Se não logou ou não achou recomendações baseadas em tags
+      // 2. Fallback (Populares)
       if (recommendedWorks.length === 0) {
         recommendedWorks = await prisma.work.findMany({
            where: { status: 'ONGOING' },
            take: 8,
-           orderBy: { views: 'desc' }, // As mais vistas
+           orderBy: { views: 'desc' },
            select: {
                 id: true, title: true, coverUrl: true, rating: true, status: true,
                 _count: { select: { chapters: true } }
@@ -119,14 +115,27 @@ export class WorkController {
       return res.json(recommendedWorks);
 
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao gerar recomendações' });
     }
   }
 
-  // DETALHES DA OBRA
+  // DETALHES DA OBRA (COM VERIFICAÇÃO DE DESBLOQUEIO)
   async show(req: Request, res: Response) {
     const { id } = req.params;
+    let userId: string | null = null;
+
+    // Soft Auth para verificar compras
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1];
+        if (token && token !== 'null') {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+          userId = decoded.id;
+        }
+      } catch (e) { /* Token inválido */ }
+    }
+
     try {
       const work = await prisma.work.findFirst({ 
         where: { OR: [{ id }, { slug: id }] }, 
@@ -137,8 +146,35 @@ export class WorkController {
           } 
         } 
       });
+      
       if (!work) return res.status(404).json({ error: 'Obra nao encontrada' });
-      return res.json(work);
+
+      // Se logado, verifica quais capítulos ele já tem
+      let unlockedChapterIds = new Set<string>();
+      if (userId) {
+        const unlocks = await prisma.unlock.findMany({
+            where: {
+                userId: userId,
+                chapterId: { in: work.chapters.map(c => c.id) }
+            }
+        });
+
+        unlocks.forEach(u => {
+            // Verifica validade (Se permanente ou se data futura)
+            if (!u.expiresAt || new Date(u.expiresAt) > new Date()) {
+                unlockedChapterIds.add(u.chapterId);
+            }
+        });
+      }
+
+      // Injeta o status isUnlocked
+      const chaptersWithStatus = work.chapters.map(chapter => ({
+          ...chapter,
+          isUnlocked: chapter.isFree || (chapter.price === 0) || unlockedChapterIds.has(chapter.id)
+      }));
+
+      return res.json({ ...work, chapters: chaptersWithStatus });
+
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao buscar detalhes' });
     }
