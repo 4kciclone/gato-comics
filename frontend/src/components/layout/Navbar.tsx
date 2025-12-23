@@ -2,13 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image"; // <--- IMPORTANTE: Importar o componente de imagem
 import { useRouter } from "next/navigation";
 import { 
   Search, Menu, PawPrint, LogOut, User as UserIcon, 
-  ShieldCheck, Users, X, Sparkles, Zap, ChevronRight, ShoppingBag // <--- ADICIONADO AQUI
+  ShieldCheck, Users, X, Sparkles, Zap, ChevronRight, ShoppingBag 
 } from "lucide-react";
-import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- ADICIONADO 'Variants'
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useUserStore } from "@/store/useUserStore";
+import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer";
 
 export function Navbar() {
   const router = useRouter();
@@ -32,7 +34,6 @@ export function Navbar() {
 
   const isAdminOrUploader = user && ['ADMIN', 'OWNER', 'UPLOADER'].includes(user.role);
 
-  // Variantes de Animação com Tipagem Explícita para corrigir o erro TS2322
   const menuVariants: Variants = {
     closed: { x: "-100%" },
     open: { 
@@ -70,7 +71,7 @@ export function Navbar() {
         {/* --- CONTEÚDO --- */}
         <div className="container mx-auto h-full flex items-center justify-between px-4 md:px-6 relative z-10">
           
-          {/* LOGO */}
+          {/* LOGO E MENU HAMBURGUER (ESQUERDA) */}
           <div className="flex items-center gap-4">
             <button 
               className="md:hidden p-2 hover:bg-black/10 rounded-full transition-colors active:scale-90"
@@ -79,14 +80,20 @@ export function Navbar() {
               <Menu className="w-7 h-7 text-black" />
             </button>
 
+            {/* --- ATUALIZAÇÃO DA LOGO AQUI (DESKTOP) --- */}
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="bg-black text-[#FFD700] p-1.5 rounded-xl shadow-lg transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 border-2 border-black">
-                <PawPrint className="w-5 h-5 fill-current" />
+              <div className="relative h-10 w-auto aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+                 <Image 
+                    src="/logo.png" // Certifique-se que o arquivo está em public/logo.png
+                    alt="Gato Comics"
+                    width={150} // Largura base para otimização
+                    height={50} // Altura base
+                    className="h-full w-auto object-contain drop-shadow-md"
+                    priority
+                 />
               </div>
-              <span className="text-xl font-black tracking-tighter uppercase hidden min-[350px]:block text-black drop-shadow-sm">
-                Gato <span className="font-light">Comics</span>
-              </span>
             </Link>
+            {/* ------------------------------------------- */}
 
             <div className="hidden md:flex items-center gap-6 ml-6">
                 <Link href="/comunidade" className="flex items-center gap-2 text-sm font-bold text-black/70 hover:text-black transition-colors uppercase tracking-wide hover:scale-105 transform duration-200">
@@ -183,23 +190,20 @@ export function Navbar() {
       <AnimatePresence>
         {isMobileMenuOpen && (
             <>
-                {/* Backdrop com Blur */}
                 <motion.div 
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-md md:hidden"
                 />
                 
-                {/* O Menu em Si */}
                 <motion.div 
                     variants={menuVariants}
                     initial="closed" animate="open" exit="closed"
                     className="fixed top-0 left-0 bottom-0 w-[85%] max-w-sm bg-[#FFD700] z-[70] shadow-2xl md:hidden flex flex-col border-r-4 border-black overflow-hidden"
                 >
-                    {/* Fundo Pontilhado dentro do menu também */}
                     <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(black 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
 
-                    {/* HEADER DO MENU (PERFIL) */}
+                    {/* HEADER DO MENU (PERFIL/LOGO) */}
                     <div className="relative p-6 bg-black text-[#FFD700] rounded-br-[40px] shadow-lg border-b-4 border-white/20">
                         <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 text-white">
                             <X className="w-6 h-6" />
@@ -229,7 +233,17 @@ export function Navbar() {
                             </motion.div>
                         ) : (
                              <motion.div variants={itemVariants} className="py-4">
-                                <h2 className="text-2xl font-black text-white mb-1">BEM-VINDO!</h2>
+                                {/* --- ATUALIZAÇÃO DA LOGO NO MOBILE --- */}
+                                <div className="mb-4">
+                                    <Image 
+                                        src="/logo.png" 
+                                        alt="Gato Comics"
+                                        width={140}
+                                        height={45}
+                                        className="object-contain"
+                                    />
+                                </div>
+                                {/* ------------------------------------- */}
                                 <p className="text-zinc-400 text-sm mb-4">Entre para sincronizar seu progresso.</p>
                                 <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="inline-block bg-[#FFD700] text-black px-6 py-2.5 rounded-full font-bold shadow-lg hover:scale-105 transition-transform">
                                     Fazer Login
@@ -238,10 +252,7 @@ export function Navbar() {
                         )}
                     </div>
 
-                    {/* CORPO DO MENU (LINKS) */}
                     <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10">
-                        
-                        {/* Busca Destacada */}
                         <motion.div variants={itemVariants} className="relative shadow-sm">
                             <input 
                                 type="text" 
@@ -280,10 +291,8 @@ export function Navbar() {
                                 )
                             ))}
                         </div>
-
                     </div>
                     
-                    {/* FOOTER */}
                     {isAuthenticated && (
                         <motion.div variants={itemVariants} className="p-6 bg-black/5 border-t border-black/10 relative z-10">
                              <button 
