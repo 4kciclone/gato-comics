@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useUserStore } from "@/store/useUserStore";
+import { CosmeticRenderer } from "@/components/ui/CosmeticRenderer";
 
 export function Navbar() {
   const router = useRouter();
@@ -74,13 +75,13 @@ export function Navbar() {
             </button>
 
             <Link href="/" className="flex items-center gap-2 group">
-              {/* LOGO RESPONSIVA: Menor no mobile, Grande no Desktop */}
-              <div className="relative h-8 w-auto md:h-16 aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
+              {/* LOGO DESKTOP (GRANDE) */}
+              <div className="relative h-10 w-auto md:h-20 aspect-[3/1] transition-transform duration-300 group-hover:scale-105">
                  <Image 
                     src="/logo.png" 
                     alt="Gato Comics"
-                    width={200}
-                    height={80}
+                    width={300}
+                    height={100}
                     className="h-full w-auto object-contain drop-shadow-sm"
                     priority
                  />
@@ -207,27 +208,52 @@ export function Navbar() {
                             <X className="w-6 h-6" />
                         </button>
 
-                        <motion.div variants={itemVariants} className="pt-4">
-                            {/* Logo no Menu também */}
-                            <div className="mb-4">
-                                <Image 
-                                    src="/logo.png" 
-                                    alt="Gato Comics"
-                                    width={160}
-                                    height={60}
-                                    className="object-contain"
-                                />
-                            </div>
-                            
-                            {isAuthenticated && user ? (
-                                <div>
-                                    <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Bem-vindo,</p>
-                                    <p className="text-lg font-black text-white leading-tight">{user.fullName}</p>
+                        {isAuthenticated && user ? (
+                            <motion.div variants={itemVariants} className="flex flex-col gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-[#FFD700] flex items-center justify-center text-2xl font-bold text-white uppercase shadow-lg overflow-hidden">
+                                         {user?.fullName?.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Caçador</p>
+                                        <p className="text-lg font-black text-white leading-tight">{user.fullName}</p>
+                                    </div>
                                 </div>
-                            ) : (
-                                <p className="text-zinc-400 text-sm">Entre para sincronizar seu progresso.</p>
-                            )}
-                        </motion.div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
+                                        <PawPrint className="w-4 h-4 text-[#FFD700]" />
+                                        <span className="font-bold text-white">{patinhas}</span>
+                                    </div>
+                                    <div className="flex-1 bg-zinc-800/50 rounded-lg p-2 flex items-center gap-2 border border-white/10">
+                                        <Zap className="w-4 h-4 text-green-400" />
+                                        <span className="font-bold text-white">VIP</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ) : (
+                             <motion.div variants={itemVariants} className="py-4">
+                                
+                                {/* --- EFEITO STICKER DA LOGO (OPÇÃO 1) --- */}
+                                <div className="mb-6 relative flex justify-center">
+                                    <div className="absolute inset-0 bg-[#FFD700] blur-2xl opacity-20 pointer-events-none" />
+                                    <div className="relative bg-white p-3 rounded-2xl shadow-[4px_4px_0px_0px_rgba(255,215,0,1)] border-2 border-black transform -rotate-2 hover:rotate-0 transition-transform duration-300">
+                                        <Image 
+                                            src="/logo.png" 
+                                            alt="Gato Comics"
+                                            width={180}
+                                            height={60}
+                                            className="object-contain"
+                                        />
+                                    </div>
+                                </div>
+                                {/* --------------------------------------- */}
+
+                                <p className="text-zinc-400 text-sm mb-4 text-center">Entre para sincronizar seu progresso.</p>
+                                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block w-full py-4 bg-[#FFD700] text-black rounded-xl font-black uppercase tracking-wider text-center hover:scale-[1.02] transition-transform shadow-lg border-2 border-transparent hover:border-white">
+                                    Fazer Login
+                                </Link>
+                             </motion.div>
+                        )}
                     </div>
 
                     <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10">
@@ -271,18 +297,16 @@ export function Navbar() {
                         </div>
                     </div>
                     
-                    {/* Footer Menu */}
-                    <div className="p-6 bg-black/5 border-t border-black/10 relative z-10">
-                        {isAuthenticated ? (
-                             <button onClick={() => {logout(); setIsMobileMenuOpen(false)}} className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors shadow-lg">
+                    {isAuthenticated && (
+                        <motion.div variants={itemVariants} className="p-6 bg-black/5 border-t border-black/10 relative z-10">
+                             <button 
+                                onClick={() => {logout(); setIsMobileMenuOpen(false)}} 
+                                className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-zinc-800 transition-colors shadow-lg"
+                             >
                                 <LogOut className="w-5 h-5" /> Sair da Conta
                              </button>
-                        ) : (
-                            <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block w-full py-4 bg-black text-[#FFD700] rounded-xl font-black uppercase tracking-wider text-center hover:scale-[1.02] transition-transform shadow-lg">
-                                Fazer Login
-                            </Link>
-                        )}
-                    </div>
+                        </motion.div>
+                    )}
                 </motion.div>
             </>
         )}
