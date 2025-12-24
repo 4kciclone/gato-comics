@@ -64,14 +64,9 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   // --- FUNÇÃO PARA RECARREGAR DADOS ---
   const refreshData = async () => {
     try {
-      // Força o backend a não usar cache
-      const workRes = await api.get(`/works/${id}`, {
-        headers: { 
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
+      // Adiciona timestamp para evitar cache do navegador
+      const timestamp = new Date().getTime();
+      const workRes = await api.get(`/works/${id}?_t=${timestamp}`);
       
       console.log('[Frontend] Obra recarregada:', workRes.data.title);
       console.log('[Frontend] Capítulos totais:', workRes.data.chapters.length);

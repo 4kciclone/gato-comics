@@ -7,7 +7,7 @@ const app = express();
 const paymentController = new PaymentController();
 
 // ==========================================
-// 1. CONFIGURAÇÃO DE SEGURANÇA (CORS)
+// 1. CONFIGURAÇÃO DE SEGURANÇA (CORS) - CORRIGIDO
 // ==========================================
 app.use(cors({
   origin: [
@@ -19,8 +19,15 @@ app.use(cors({
     process.env.FRONTEND_URL || ''     // Variável do .env (Fallback dinâmico)
   ].filter(Boolean), // Remove entradas vazias/nulas
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization',
+    'Cache-Control',  // ← ADICIONADO para evitar erro CORS
+    'Pragma',         // ← ADICIONADO para evitar erro CORS
+    'Expires'         // ← ADICIONADO para evitar erro CORS
+  ],
+  exposedHeaders: ['Cache-Control', 'Content-Type']
 }));
 
 // ==========================================
@@ -63,4 +70,9 @@ const PORT = process.env.PORT || 4000;
 
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 API rodando na porta ${PORT}`);
+  console.log(`📡 CORS configurado para: ${[
+    'http://localhost:3000',
+    'https://gatocomics.com.br',
+    'https://www.gatocomics.com.br'
+  ].join(', ')}`);
 });
