@@ -124,7 +124,7 @@ export class WorkController {
     const { id } = req.params;
     let userId: string | null = null;
 
-    // --- CORREÇÃO: Extração de Token Robusta ---
+    // Extração de Token
     const authHeader = req.headers.authorization;
     if (authHeader) {
       try {
@@ -133,11 +133,8 @@ export class WorkController {
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
             userId = decoded.id;
         }
-      } catch (e) {
-        console.log("Token inválido no show work:", e);
-      }
+      } catch (e) { console.log("Token inválido show:", e); }
     }
-    // ------------------------------------------
 
     try {
       const work = await prisma.work.findFirst({ 
@@ -154,28 +151,29 @@ export class WorkController {
       
       if (!work) return res.status(404).json({ error: 'Obra nao encontrada' });
 
-      // Se logado, verifica unlocks
-      let unlockedChapterIds = new Set<string>();
+      // Mapa de Unlocks
+      const unlockedMap: Record<string, boolean> = {};
+
       if (userId) {
-        const unlocks = await prisma.unlock.findMany({
-            where: {
-                userId: userId,
-                chapterId: { in: work.chapters.map(c => c.id) }
-            }
+        // Busca TODOS os unlocks do usuário (Mais seguro que filtrar por lista de IDs complexa)
+        // Otimização: Seleciona apenas o chapterId e expiresAt
+        const allUnlocks = await prisma.unlock.findMany({
+            where: { userId: userId },
+            select: { chapterId: true, expiresAt: true }
         });
 
-        unlocks.forEach(u => {
-            // Verifica se é permanente ou se ainda é válido (Lite)
-            if (!u.expiresAt || new Date(u.expiresAt) > new Date()) {
-                unlockedChapterIds.add(u.chapterId);
+        allUnlocks.forEach(u => {
+            const isValid = !u.expiresAt || new Date(u.expiresAt) > new Date();
+            if (isValid) {
+                unlockedMap[u.chapterId] = true;
             }
         });
       }
 
       const chaptersWithStatus = work.chapters.map(chapter => ({
           ...chapter,
-          // É desbloqueado se: Grátis OU (Preço 0) OU (Está na lista de unlocks)
-          isUnlocked: chapter.isFree || (chapter.price === 0) || unlockedChapterIds.has(chapter.id)
+          // É desbloqueado se: Grátis OU Preço 0 OU Está no Mapa de Unlocks
+          isUnlocked: chapter.isFree || (chapter.price === 0) || !!unlockedMap[chapter.id]
       }));
 
       return res.json({ ...work, chapters: chaptersWithStatus });
