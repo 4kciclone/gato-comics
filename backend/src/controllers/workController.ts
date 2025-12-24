@@ -124,17 +124,20 @@ export class WorkController {
     const { id } = req.params;
     let userId: string | null = null;
 
-    // Soft Auth para verificar compras
+    // --- CORREÇÃO: Extração de Token Robusta ---
     const authHeader = req.headers.authorization;
     if (authHeader) {
       try {
-        const token = authHeader.split(' ')[1];
-        if (token && token !== 'null') {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
-          userId = decoded.id;
+        const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+        if (token && token !== 'null' && token !== 'undefined') {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+            userId = decoded.id;
         }
-      } catch (e) { /* Token inválido */ }
+      } catch (e) {
+        console.log("Token inválido no show work:", e);
+      }
     }
+    // ------------------------------------------
 
     try {
       const work = await prisma.work.findFirst({ 
@@ -142,14 +145,16 @@ export class WorkController {
         include: { 
           chapters: {
             orderBy: { number: 'asc' },
-            select: { id: true, number: true, title: true, isFree: true, price: true, createdAt: true }
+            select: { 
+              id: true, number: true, title: true, isFree: true, price: true, createdAt: true 
+            }
           } 
         } 
       });
       
       if (!work) return res.status(404).json({ error: 'Obra nao encontrada' });
 
-      // Se logado, verifica quais capítulos ele já tem
+      // Se logado, verifica unlocks
       let unlockedChapterIds = new Set<string>();
       if (userId) {
         const unlocks = await prisma.unlock.findMany({
@@ -160,22 +165,23 @@ export class WorkController {
         });
 
         unlocks.forEach(u => {
-            // Verifica validade (Se permanente ou se data futura)
+            // Verifica se é permanente ou se ainda é válido (Lite)
             if (!u.expiresAt || new Date(u.expiresAt) > new Date()) {
                 unlockedChapterIds.add(u.chapterId);
             }
         });
       }
 
-      // Injeta o status isUnlocked
       const chaptersWithStatus = work.chapters.map(chapter => ({
           ...chapter,
+          // É desbloqueado se: Grátis OU (Preço 0) OU (Está na lista de unlocks)
           isUnlocked: chapter.isFree || (chapter.price === 0) || unlockedChapterIds.has(chapter.id)
       }));
 
       return res.json({ ...work, chapters: chaptersWithStatus });
 
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao buscar detalhes' });
     }
   }
