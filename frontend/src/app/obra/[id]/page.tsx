@@ -120,14 +120,22 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   };
 
   const handleChapterClick = (chapter: Chapter) => {
-    // Verifica primeiro o backend (isUnlocked) e depois o estado local (isUnlocked da store)
-    const localUnlock = isUnlocked(work?.id || '', chapter.id);
+    // Verificações de Acesso:
+    // 1. É grátis? (isFree ou preço 0)
+    // 2. O Backend disse que está desbloqueado? (isUnlocked)
+    // 3. A Store local diz que está desbloqueado? (isUnlocked local)
     
-    if (chapter.isUnlocked || localUnlock) {
+    const isFree = chapter.isFree || chapter.price === 0;
+    const localUnlock = isUnlocked(work?.id || '', chapter.id);
+    const hasAccess = isFree || chapter.isUnlocked || localUnlock;
+
+    if (hasAccess) {
+        // Se tiver qualquer um desses acessos, abre o leitor direto
         router.push(`/leitor/${work?.id}/${chapter.id}`);
         return;
     }
     
+    // Se não tiver acesso, aí sim abre o modal de compra
     setSelectedChapter(chapter.id);
     setShowModal(true);
   };
