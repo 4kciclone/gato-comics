@@ -49,7 +49,7 @@ router.post('/auth/reset-password', authController.resetPassword);
 // Leitura
 router.get('/works/featured', workController.getFeatured); 
 router.get('/works/ranking', workController.getRanking);
-router.get('/works/recommendations', workController.getRecommendations); // <--- NOVA ROTA
+router.get('/works/recommendations', workController.getRecommendations);
 router.get('/works', workController.list);
 router.get('/works/:id', workController.show);
 router.post('/works/:id/view', workController.registerView);
@@ -68,6 +68,7 @@ router.get('/shop/items', cosmeticController.listStore);
 
 // Perfil
 router.get('/auth/profile', authMiddleware, authController.getProfile);
+router.get('/auth/unlocks', authMiddleware, authController.getMyUnlocks); // ← NOVA ROTA
 router.get('/auth/inventory', authMiddleware, cosmeticController.getInventory);
 router.post('/auth/inventory/equip', authMiddleware, cosmeticController.equip);
 router.post('/ads/watch', authMiddleware, adsController.watchAd);

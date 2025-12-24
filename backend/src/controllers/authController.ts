@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto'; // Nativo do Node.js
+import crypto from 'crypto';
 import { generateToken } from '../utils/jwt';
-import { sendResetEmail } from '../utils/mailer'; // Certifique-se de ter criado este arquivo
+import { sendResetEmail } from '../utils/mailer';
 
 const prisma = new PrismaClient();
 
@@ -127,6 +127,71 @@ export class AuthController {
   }
 
   // ==========================================
+  // NOVO: BUSCAR UNLOCKS DO USUÁRIO
+  // ==========================================
+  async getMyUnlocks(req: Request, res: Response) {
+    try {
+      const userId = req.userId!;
+      
+      console.log(`[Auth] Buscando unlocks do usuário ${userId}`);
+      
+      const now = new Date();
+      
+      // Busca todos os unlocks válidos (não expirados)
+      const unlocks = await prisma.unlock.findMany({
+        where: {
+          userId: userId,
+          OR: [
+            { expiresAt: null },           // Permanente (PREMIUM)
+            { expiresAt: { gt: now } }     // Temporário válido (LITE)
+          ]
+        },
+        include: {
+          chapter: {
+            select: {
+              id: true,
+              workId: true,
+              number: true,
+              price: true,
+              title: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+      
+      console.log(`[Auth] ✅ Encontrados ${unlocks.length} unlocks válidos`);
+      
+      // Formata os dados para o frontend
+      const formattedUnlocks = unlocks.map(unlock => ({
+        workId: unlock.chapter.workId,
+        chapterId: unlock.chapterId,
+        chapterNumber: unlock.chapter.number,
+        chapterTitle: unlock.chapter.title,
+        type: unlock.type,
+        unlockedAt: unlock.createdAt,
+        expiresAt: unlock.expiresAt,
+        pricePaid: unlock.chapter.price
+      }));
+      
+      return res.json({
+        success: true,
+        unlocks: formattedUnlocks,
+        total: formattedUnlocks.length
+      });
+      
+    } catch (error) {
+      console.error('[Auth] ❌ Erro ao buscar unlocks:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Erro ao buscar capítulos desbloqueados' 
+      });
+    }
+  }
+
+  // ==========================================
   // ESQUECI A SENHA (Envia Email)
   // ==========================================
   async forgotPassword(req: Request, res: Response) {
@@ -134,17 +199,14 @@ export class AuthController {
       const { email } = req.body;
       const user = await prisma.user.findUnique({ where: { email } });
 
-      // Se não achar o usuário, retornamos sucesso mesmo assim por segurança (evitar enumeration attack)
       if (!user) {
         return res.json({ message: 'Se o email existir, um link foi enviado.' });
       }
 
-      // Gera token seguro
       const token = crypto.randomBytes(32).toString('hex');
       const now = new Date();
-      now.setHours(now.getHours() + 1); // Expira em 1 hora
+      now.setHours(now.getHours() + 1);
 
-      // Salva token no banco
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -153,7 +215,6 @@ export class AuthController {
         }
       });
 
-      // Envia o email (Lógica no utils/mailer.ts)
       await sendResetEmail(user.email, token);
 
       return res.json({ message: 'Email enviado.' });
@@ -174,7 +235,7 @@ export class AuthController {
       const user = await prisma.user.findFirst({
         where: {
           resetToken: token,
-          resetTokenExpiry: { gt: new Date() } // Token deve ser válido e não expirado
+          resetTokenExpiry: { gt: new Date() }
         }
       });
 
