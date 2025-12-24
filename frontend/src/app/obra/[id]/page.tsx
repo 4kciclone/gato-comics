@@ -21,7 +21,7 @@ interface Chapter {
   isFree: boolean;
   price: number;
   createdAt: string;
-  isUnlocked?: boolean; // Campo dinâmico
+  isUnlocked?: boolean;
 }
 
 interface Work {
@@ -64,7 +64,21 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   // --- FUNÇÃO PARA RECARREGAR DADOS ---
   const refreshData = async () => {
     try {
-      const workRes = await api.get(`/works/${id}`);
+      // Força o backend a não usar cache
+      const workRes = await api.get(`/works/${id}`, {
+        headers: { 
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      
+      console.log('[Frontend] Obra recarregada:', workRes.data.title);
+      console.log('[Frontend] Capítulos totais:', workRes.data.chapters.length);
+      console.log('[Frontend] Capítulos desbloqueados:', 
+        workRes.data.chapters.filter((c: Chapter) => c.isUnlocked).length
+      );
+      
       setWork(workRes.data);
 
       if (isAuthenticated) {
@@ -96,21 +110,32 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
     if (!isAuthenticated) return router.push("/login");
     const newState = !isFavorite;
     setIsFavorite(newState);
-    try { await api.post(`/works/${id}/interaction`, { isFavorite: newState }); } 
-    catch (e) { setIsFavorite(!newState); }
+    try { 
+      await api.post(`/works/${id}/interaction`, { isFavorite: newState }); 
+    } catch (e) { 
+      setIsFavorite(!newState); 
+    }
   };
 
   const handleRate = async (rating: number) => {
     if (!isAuthenticated) return router.push("/login");
     setMyRating(rating);
-    try { await api.post(`/works/${id}/interaction`, { rating }); } catch (e) {}
+    try { 
+      await api.post(`/works/${id}/interaction`, { rating }); 
+    } catch (e) {
+      console.error('Erro ao avaliar', e);
+    }
   };
 
   const handleStatusChange = async (status: string) => {
     if (!isAuthenticated) return router.push("/login");
     setMyStatus(status);
     setShowStatusMenu(false);
-    try { await api.post(`/works/${id}/interaction`, { status }); } catch (e) {}
+    try { 
+      await api.post(`/works/${id}/interaction`, { status }); 
+    } catch (e) {
+      console.error('Erro ao mudar status', e);
+    }
   };
 
   const handleShare = () => {
@@ -120,22 +145,27 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   };
 
   const handleChapterClick = (chapter: Chapter) => {
-    // Verificações de Acesso:
-    // 1. É grátis? (isFree ou preço 0)
-    // 2. O Backend disse que está desbloqueado? (isUnlocked)
-    // 3. A Store local diz que está desbloqueado? (isUnlocked local)
+    // PRIORIDADE: Backend é a fonte da verdade (chapter.isUnlocked)
+    // Store local é apenas fallback temporário (entre compra e refresh)
     
     const isFree = chapter.isFree || chapter.price === 0;
+    const backendUnlocked = chapter.isUnlocked === true;
     const localUnlock = isUnlocked(work?.id || '', chapter.id);
-    const hasAccess = isFree || chapter.isUnlocked || localUnlock;
+    
+    const hasAccess = isFree || backendUnlocked || localUnlock;
+
+    console.log(`[Click] Cap ${chapter.number}:`, {
+      isFree,
+      backendUnlocked,
+      localUnlock,
+      hasAccess
+    });
 
     if (hasAccess) {
-        // Se tiver qualquer um desses acessos, abre o leitor direto
         router.push(`/leitor/${work?.id}/${chapter.id}`);
         return;
     }
     
-    // Se não tiver acesso, aí sim abre o modal de compra
     setSelectedChapter(chapter.id);
     setShowModal(true);
   };
@@ -149,19 +179,26 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
     
     if (selectedChapter && work) {
       setProcessingPurchase(true);
+      
       try {
+        console.log(`[Compra] Iniciando compra do cap ${selectedChapter} via ${method}`);
+        
         const response = await api.post(`/chapters/${selectedChapter}/unlock`, { method });
         
         if (response.data.success) {
-          // 1. Atualiza Saldos (Visual)
+          console.log('[Compra] Sucesso! Atualizando interface...');
+          
+          // 1. Atualiza Saldos
           if (method === 'premium' && response.data.newBalancePremium !== undefined) {
              useUserStore.setState({ patinhas: response.data.newBalancePremium });
+             console.log('[Compra] Novo saldo Premium:', response.data.newBalancePremium);
           }
           if (method === 'lite' && response.data.newBalanceLite !== undefined) {
              setMyLiteBalance(response.data.newBalanceLite);
+             console.log('[Compra] Novo saldo Lite:', response.data.newBalanceLite);
           }
 
-          // 2. ATUALIZAÇÃO OTIMISTA (Muda visualmente para desbloqueado agora)
+          // 2. ATUALIZAÇÃO OTIMISTA (Visual instantâneo)
           const updatedChapters = work.chapters.map(ch => {
             if (ch.id === selectedChapter) {
                 return { ...ch, isUnlocked: true };
@@ -171,33 +208,60 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
           
           setWork({ ...work, chapters: updatedChapters });
           
-          // 3. Atualiza store global de unlocks
+          // 3. Atualiza store global de unlocks (fallback local)
           unlockChapter(work.id, selectedChapter, 0); 
 
           setShowModal(false);
           
           // 4. Redireciona
+          console.log('[Compra] Redirecionando para leitor...');
           router.push(`/leitor/${work.id}/${selectedChapter}`);
           
-          // 5. Atualiza em background
-          refreshData(); 
+          // 5. Atualiza em background (confirma com backend)
+          setTimeout(() => {
+            console.log('[Compra] Sincronizando com backend...');
+            refreshData();
+          }, 1000);
         }
       } catch (error: any) {
-        alert(error.response?.data?.error || "Erro na compra");
+        console.error('[Compra] Erro:', error);
+        alert(error.response?.data?.error || "Erro ao processar compra");
       } finally {
         setProcessingPurchase(false);
       }
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-gato-black flex items-center justify-center"><Loader2 className="w-12 h-12 text-gato-purple animate-spin" /></div>;
-  if (!work) return <div className="p-10 text-white">Obra não encontrada</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gato-black flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-gato-purple animate-spin" />
+      </div>
+    );
+  }
+  
+  if (!work) {
+    return (
+      <div className="min-h-screen bg-gato-black flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <p className="text-white text-xl">Obra não encontrada</p>
+          <Link href="/" className="text-gato-purple hover:underline mt-4 inline-block">
+            Voltar para início
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const statusOptions = [
-    { value: 'LENDO', label: 'Lendo' }, { value: 'LEREI', label: 'Vou Ler' },
-    { value: 'COMPLETO', label: 'Completo' }, { value: 'DROPADO', label: 'Dropado' },
+    { value: 'LENDO', label: 'Lendo' }, 
+    { value: 'LEREI', label: 'Vou Ler' },
+    { value: 'COMPLETO', label: 'Completo' }, 
+    { value: 'DROPADO', label: 'Dropado' },
     { value: 'NENHUM', label: 'Sem Status' },
   ];
+  
   const currentStatusLabel = statusOptions.find(s => s.value === myStatus)?.label || "Biblioteca";
   const targetChapterInfo = work.chapters.find(c => c.id === selectedChapter);
 
@@ -207,61 +271,141 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
       {/* HEADER */}
       <div className="relative w-full h-[50vh] md:h-[60vh]">
         <div className="absolute inset-0 overflow-hidden">
-          <img src={work.bannerUrl || work.coverUrl} className="w-full h-full object-cover blur-sm opacity-60" />
+          <img 
+            src={work.bannerUrl || work.coverUrl} 
+            alt={work.title}
+            className="w-full h-full object-cover blur-sm opacity-60" 
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-gato-black via-gato-black/80 to-transparent" />
         </div>
 
         <div className="absolute inset-0 container mx-auto px-4 flex flex-col justify-end pb-8">
-          <Link href="/" className="absolute top-20 left-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white/10 transition-colors z-20">
+          <Link 
+            href="/" 
+            className="absolute top-20 left-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white/10 transition-colors z-20"
+          >
             <ArrowLeft className="w-6 h-6" />
           </Link>
 
           <div className="flex flex-col md:flex-row gap-6 md:gap-10 items-end">
-            <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-32 md:w-56 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(138,43,226,0.3)] border border-white/10 shrink-0 mx-auto md:mx-0">
-              <img src={work.coverUrl} className="w-full h-auto" />
+            <motion.div 
+              initial={{ y: 50, opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              className="w-32 md:w-56 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(138,43,226,0.3)] border border-white/10 shrink-0 mx-auto md:mx-0"
+            >
+              <img src={work.coverUrl} alt={work.title} className="w-full h-auto" />
             </motion.div>
 
             <div className="flex-1 space-y-4 text-center md:text-left w-full">
               <div className="flex flex-wrap gap-2 justify-center md:justify-start mb-2">
                 {work.tags.map((tag, i) => (
-                  <span key={i} className="px-2 py-1 text-[10px] font-bold bg-gato-purple/20 text-gato-purple border border-gato-purple/30 rounded uppercase">{tag}</span>
+                  <span 
+                    key={i} 
+                    className="px-2 py-1 text-[10px] font-bold bg-gato-purple/20 text-gato-purple border border-gato-purple/30 rounded uppercase"
+                  >
+                    {tag}
+                  </span>
                 ))}
               </div>
-              <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight">{work.title}</h1>
+              
+              <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight">
+                {work.title}
+              </h1>
+              
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-sm text-gato-muted">
-                <span className="flex items-center gap-1"><Star className="w-4 h-4 text-gato-amber fill-current" /> {Number(work.rating).toFixed(1)}</span>
-                <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {work.status}</span>
+                <span className="flex items-center gap-1">
+                  <Star className="w-4 h-4 text-gato-amber fill-current" /> 
+                  {Number(work.rating).toFixed(1)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" /> 
+                  {work.status}
+                </span>
               </div>
 
               {/* AÇÕES */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
-                <button onClick={() => { if(work.chapters.length > 0) handleChapterClick(work.chapters[0]); }} className="flex-1 md:flex-none bg-gato-purple hover:bg-gato-purple/80 text-white px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95">
+                <button 
+                  onClick={() => { 
+                    if(work.chapters.length > 0) handleChapterClick(work.chapters[0]); 
+                  }} 
+                  className="flex-1 md:flex-none bg-gato-purple hover:bg-gato-purple/80 text-white px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
+                >
                   <Play className="w-5 h-5 fill-current" /> Ler Agora
                 </button>
+                
                 <div className="relative">
-                    <button onClick={() => setShowStatusMenu(!showStatusMenu)} className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all border border-white/10 ${myStatus !== 'NENHUM' ? 'bg-white/10 text-white' : 'bg-black/40 text-zinc-400 hover:text-white'}`}>
-                        <Bookmark className={`w-5 h-5 ${myStatus !== 'NENHUM' ? 'fill-current text-gato-purple' : ''}`} /> {currentStatusLabel} <ChevronDown className="w-4 h-4 opacity-50" />
+                    <button 
+                      onClick={() => setShowStatusMenu(!showStatusMenu)} 
+                      className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition-all border border-white/10 ${
+                        myStatus !== 'NENHUM' 
+                          ? 'bg-white/10 text-white' 
+                          : 'bg-black/40 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                        <Bookmark className={`w-5 h-5 ${myStatus !== 'NENHUM' ? 'fill-current text-gato-purple' : ''}`} /> 
+                        {currentStatusLabel} 
+                        <ChevronDown className="w-4 h-4 opacity-50" />
                     </button>
+                    
                     {showStatusMenu && (
                         <div className="absolute top-full left-0 mt-2 w-48 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col">
                             {statusOptions.map(opt => (
-                                <button key={opt.value} onClick={() => handleStatusChange(opt.value)} className={`text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${myStatus === opt.value ? 'bg-white/5 font-bold text-white' : 'text-zinc-400'}`}>{opt.label}</button>
+                                <button 
+                                  key={opt.value} 
+                                  onClick={() => handleStatusChange(opt.value)} 
+                                  className={`text-left px-4 py-3 text-sm hover:bg-white/5 transition-colors ${
+                                    myStatus === opt.value 
+                                      ? 'bg-white/5 font-bold text-white' 
+                                      : 'text-zinc-400'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
                             ))}
                         </div>
                     )}
                 </div>
-                <button onClick={handleFavorite} className={`p-3 rounded-xl border border-white/10 transition-all ${isFavorite ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-black/40 text-zinc-400 hover:text-white'}`}><Heart className={`w-6 h-6 ${isFavorite ? 'fill-current' : ''}`} /></button>
-                <button onClick={handleShare} className="p-3 rounded-xl border border-white/10 bg-black/40 text-zinc-400 hover:text-white transition-all relative">
-                    {copied ? <CheckCircle className="w-6 h-6 text-green-500" /> : <Share2 className="w-6 h-6" />}
+                
+                <button 
+                  onClick={handleFavorite} 
+                  className={`p-3 rounded-xl border border-white/10 transition-all ${
+                    isFavorite 
+                      ? 'bg-red-500/10 text-red-500 border-red-500/20' 
+                      : 'bg-black/40 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Heart className={`w-6 h-6 ${isFavorite ? 'fill-current' : ''}`} />
+                </button>
+                
+                <button 
+                  onClick={handleShare} 
+                  className="p-3 rounded-xl border border-white/10 bg-black/40 text-zinc-400 hover:text-white transition-all relative"
+                >
+                    {copied ? (
+                      <CheckCircle className="w-6 h-6 text-green-500" />
+                    ) : (
+                      <Share2 className="w-6 h-6" />
+                    )}
                 </button>
               </div>
 
               <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
-                <span className="text-xs text-zinc-500 uppercase font-bold tracking-widest">Sua Nota:</span>
+                <span className="text-xs text-zinc-500 uppercase font-bold tracking-widest">
+                  Sua Nota:
+                </span>
                 <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
-                        <button key={star} onClick={() => handleRate(star)} className="focus:outline-none transition-transform hover:scale-110">
-                            <Star className={`w-5 h-5 ${star <= myRating ? 'text-gato-amber fill-current' : 'text-zinc-700'}`} />
+                        <button 
+                          key={star} 
+                          onClick={() => handleRate(star)} 
+                          className="focus:outline-none transition-transform hover:scale-110"
+                        >
+                            <Star className={`w-5 h-5 ${
+                              star <= myRating 
+                                ? 'text-gato-amber fill-current' 
+                                : 'text-zinc-700'
+                            }`} />
                         </button>
                     ))}
                 </div>
@@ -276,37 +420,69 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
         <div className="md:col-span-2 space-y-12">
           <section>
             <h3 className="text-xl font-bold text-white mb-3">Sinopse</h3>
-            <p className="text-gato-ghost leading-relaxed text-sm md:text-base">{work.description}</p>
+            <p className="text-gato-ghost leading-relaxed text-sm md:text-base">
+              {work.description}
+            </p>
           </section>
 
           <section>
             <h3 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
               <span>Capítulos ({work.chapters.length})</span>
             </h3>
+            
             <div className="space-y-2">
               {work.chapters.map((chapter) => {
-                // CORREÇÃO: Renomeado para evitar conflito com a função isUnlocked
-                const hasAccess = chapter.isUnlocked || isUnlocked(work.id, chapter.id);
-                const isLocked = !chapter.isFree && !hasAccess;
+                // Backend é a fonte da verdade sobre unlocks
+                const hasAccess = chapter.isUnlocked === true || chapter.isFree || chapter.price === 0;
+                const isLocked = !hasAccess;
                 
                 return (
-                  <div key={chapter.id} onClick={() => handleChapterClick(chapter)} className={`group flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${!isLocked ? "bg-gato-amber/5 border-gato-amber/30 hover:bg-gato-amber/10" : "bg-white/5 border-white/5 hover:bg-white/10 opacity-90"}`}>
+                  <div 
+                    key={chapter.id} 
+                    onClick={() => handleChapterClick(chapter)} 
+                    className={`group flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${
+                      !isLocked 
+                        ? "bg-gato-amber/5 border-gato-amber/30 hover:bg-gato-amber/10" 
+                        : "bg-white/5 border-white/5 hover:bg-white/10 opacity-90"
+                    }`}
+                  >
                     <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-full ${!isLocked ? 'bg-gato-amber/20' : 'bg-black/40'}`}>
-                        {!isLocked ? <Unlock className="w-4 h-4 text-gato-amber" /> : <Lock className="w-4 h-4 text-gato-muted" />}
+                      <div className={`p-2 rounded-full ${
+                        !isLocked ? 'bg-gato-amber/20' : 'bg-black/40'
+                      }`}>
+                        {!isLocked ? (
+                          <Unlock className="w-4 h-4 text-gato-amber" />
+                        ) : (
+                          <Lock className="w-4 h-4 text-gato-muted" />
+                        )}
                       </div>
+                      
                       <div>
-                        <h4 className={`font-bold text-sm ${!isLocked ? 'text-gato-amber' : 'text-white'}`}>Capítulo {chapter.number} {chapter.title ? `- ${chapter.title}` : ''}</h4>
-                        <span className="text-xs text-gato-muted">{new Date(chapter.createdAt).toLocaleDateString()}</span>
+                        <h4 className={`font-bold text-sm ${
+                          !isLocked ? 'text-gato-amber' : 'text-white'
+                        }`}>
+                          Capítulo {chapter.number} 
+                          {chapter.title ? ` - ${chapter.title}` : ''}
+                        </h4>
+                        <span className="text-xs text-gato-muted">
+                          {new Date(chapter.createdAt).toLocaleDateString('pt-BR')}
+                        </span>
                       </div>
                     </div>
+                    
                     <div className="text-xs font-bold">
                       {hasAccess ? (
-                         <span className="text-gato-amber font-extrabold tracking-wider">LIBERADO</span>
+                         <span className="text-gato-amber font-extrabold tracking-wider">
+                           LIBERADO
+                         </span>
                       ) : chapter.isFree ? (
-                         <span className="text-gato-green bg-gato-green/10 px-2 py-1 rounded">GRÁTIS</span>
+                         <span className="text-gato-green bg-gato-green/10 px-2 py-1 rounded">
+                           GRÁTIS
+                         </span>
                       ) : (
-                         <button className="flex items-center gap-1 bg-white/10 hover:bg-gato-purple hover:text-white px-3 py-1.5 rounded-full transition-colors text-gato-ghost">{chapter.price} 🐾</button>
+                         <button className="flex items-center gap-1 bg-white/10 hover:bg-gato-purple hover:text-white px-3 py-1.5 rounded-full transition-colors text-gato-ghost">
+                           {chapter.price} 🐾
+                         </button>
                       )}
                     </div>
                   </div>
@@ -325,37 +501,105 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
               <div>
                 <h4 className="font-bold text-white mb-4">Ficha Técnica</h4>
                 <ul className="space-y-3 text-sm text-gato-muted">
-                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Autor</span> <span className="text-white font-medium">{work.author}</span></li>
-                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Artista</span> <span className="text-white font-medium">{work.artist || '-'}</span></li>
-                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Status</span> <span className="text-gato-purple font-medium">{work.status}</span></li>
+                  <li className="flex justify-between border-b border-white/5 pb-2">
+                    <span>Autor</span> 
+                    <span className="text-white font-medium">{work.author}</span>
+                  </li>
+                  <li className="flex justify-between border-b border-white/5 pb-2">
+                    <span>Artista</span> 
+                    <span className="text-white font-medium">{work.artist || '-'}</span>
+                  </li>
+                  <li className="flex justify-between border-b border-white/5 pb-2">
+                    <span>Status</span> 
+                    <span className="text-gato-purple font-medium">{work.status}</span>
+                  </li>
                 </ul>
               </div>
            </div>
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL DE COMPRA */}
       <AnimatePresence>
         {showModal && targetChapterInfo && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !processingPurchase && setShowModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-gato-gray border border-white/10 w-full max-w-sm p-6 rounded-2xl shadow-2xl">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => !processingPurchase && setShowModal(false)} 
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm" 
+            />
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              className="relative bg-gato-gray border border-white/10 w-full max-w-sm p-6 rounded-2xl shadow-2xl"
+            >
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gato-purple via-gato-amber to-gato-purple" />
-               <h3 className="text-xl font-bold text-white text-center mb-2 mt-2">Desbloquear Capítulo {targetChapterInfo.number}?</h3>
-               <p className="text-center text-gato-muted text-sm mb-6">Escolha como deseja acessar este conteúdo.</p>
+               
+               <h3 className="text-xl font-bold text-white text-center mb-2 mt-2">
+                 Desbloquear Capítulo {targetChapterInfo.number}?
+               </h3>
+               
+               <p className="text-center text-gato-muted text-sm mb-6">
+                 Escolha como deseja acessar este conteúdo.
+               </p>
 
                <div className="space-y-3">
-                   <button onClick={() => confirmPurchase('premium')} disabled={processingPurchase || patinhas < targetChapterInfo.price} className="w-full flex items-center justify-between bg-gradient-to-r from-gato-amber to-yellow-600 hover:brightness-110 disabled:opacity-50 text-black font-bold p-4 rounded-xl transition-all active:scale-95">
-                        <div className="text-left"><div className="flex items-center gap-2"><Crown className="w-4 h-4" /> Acesso Vitalício</div><div className="text-[10px] opacity-80 font-normal">Nunca expira</div></div>
-                        <div className="text-right"><span className="block text-sm">{targetChapterInfo.price} 🐾</span><span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded">Saldo: {patinhas}</span></div>
+                   <button 
+                     onClick={() => confirmPurchase('premium')} 
+                     disabled={processingPurchase || patinhas < targetChapterInfo.price} 
+                     className="w-full flex items-center justify-between bg-gradient-to-r from-gato-amber to-yellow-600 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold p-4 rounded-xl transition-all active:scale-95"
+                   >
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <Crown className="w-4 h-4" /> 
+                            Acesso Vitalício
+                          </div>
+                          <div className="text-[10px] opacity-80 font-normal">
+                            Nunca expira
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-sm">{targetChapterInfo.price} 🐾</span>
+                          <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded">
+                            Saldo: {patinhas}
+                          </span>
+                        </div>
                    </button>
                    
-                   <button onClick={() => confirmPurchase('lite')} disabled={processingPurchase || myLiteBalance < 2} className="w-full flex items-center justify-between bg-zinc-800 border border-gato-green/30 hover:border-gato-green hover:bg-zinc-700 disabled:opacity-50 text-white font-bold p-4 rounded-xl transition-all active:scale-95">
-                        <div className="text-left"><div className="flex items-center gap-2 text-gato-green"><Zap className="w-4 h-4" /> Aluguel (3 Dias)</div><div className="text-[10px] text-zinc-400 font-normal">Patinhas Lite</div></div>
-                        <div className="text-right"><span className="block text-sm text-gato-green">2 Lite</span><span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded text-zinc-400">Saldo: {myLiteBalance}</span></div>
+                   <button 
+                     onClick={() => confirmPurchase('lite')} 
+                     disabled={processingPurchase || myLiteBalance < 2} 
+                     className="w-full flex items-center justify-between bg-zinc-800 border border-gato-green/30 hover:border-gato-green hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold p-4 rounded-xl transition-all active:scale-95"
+                   >
+                        <div className="text-left">
+                          <div className="flex items-center gap-2 text-gato-green">
+                            <Zap className="w-4 h-4" /> 
+                            Aluguel (3 Dias)
+                          </div>
+                          <div className="text-[10px] text-zinc-400 font-normal">
+                            Patinhas Lite
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-sm text-gato-green">2 Lite</span>
+                          <span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded text-zinc-400">
+                            Saldo: {myLiteBalance}
+                          </span>
+                        </div>
                    </button>
                </div>
-               <button onClick={() => setShowModal(false)} disabled={processingPurchase} className="w-full text-center text-xs text-gato-muted hover:text-white underline mt-6">Cancelar</button>
+               
+               <button 
+                 onClick={() => setShowModal(false)} 
+                 disabled={processingPurchase} 
+                 className="w-full text-center text-xs text-gato-muted hover:text-white underline mt-6 disabled:opacity-50"
+               >
+                 Cancelar
+               </button>
             </motion.div>
           </div>
         )}
