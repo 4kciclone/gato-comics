@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, Star, Clock, Share2, 
   Play, Lock, Unlock, Crown, Eye, Loader2, AlertCircle, 
-  Heart, Bookmark, ChevronDown, Zap
+  Heart, Bookmark, ChevronDown, Zap, CheckCircle
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import { useUserStore } from "@/store/useUserStore";
 import api from "@/lib/api";
 import { CommentSection } from "@/components/ui/CommentSection";
 
+// --- TIPOS ---
 interface Chapter {
   id: string;
   number: number;
@@ -20,7 +21,7 @@ interface Chapter {
   isFree: boolean;
   price: number;
   createdAt: string;
-  isUnlocked?: boolean; // Campo novo vindo do backend
+  isUnlocked?: boolean; // Campo dinâmico
 }
 
 interface Work {
@@ -41,8 +42,8 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   const { id } = use(params);
   const router = useRouter();
   
-  // Usamos a store apenas para auth básica e atualizar o header visualmente
-  const { patinhas, addPatinhas, isAuthenticated, user } = useUserStore();
+  // Store Global
+  const { patinhas, unlockChapter, isUnlocked, addPatinhas, isAuthenticated, user } = useUserStore();
 
   const [work, setWork] = useState<Work | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,11 +64,9 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   // --- FUNÇÃO PARA RECARREGAR DADOS ---
   const refreshData = async () => {
     try {
-      // 1. Busca dados da Obra (Agora traz os unlocks atualizados do banco)
       const workRes = await api.get(`/works/${id}`);
       setWork(workRes.data);
 
-      // 2. Se logado, atualiza saldo e interações
       if (isAuthenticated) {
         const [interactionRes, profileRes] = await Promise.all([
             api.get(`/works/${id}/interaction`),
@@ -78,7 +77,6 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
         setMyStatus(interactionRes.data.status || "NENHUM");
         setIsFavorite(interactionRes.data.isFavorite || false);
 
-        // ATUALIZA SALDOS LOCAIS PARA GARANTIR SINCRONIA
         setMyLiteBalance(profileRes.data.patinhasLite || 0);
         useUserStore.setState({ patinhas: profileRes.data.patinhasBalance });
       }
@@ -87,11 +85,10 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
     }
   };
 
-  // Carrega ao iniciar
   useEffect(() => {
     setLoading(true);
     refreshData().finally(() => setLoading(false));
-  }, [id, isAuthenticated]); // Recarrega se o status de login mudar
+  }, [id, isAuthenticated]);
 
   // --- AÇÕES ---
 
@@ -123,40 +120,59 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
   };
 
   const handleChapterClick = (chapter: Chapter) => {
-    // Confia na informação que veio do Backend (isUnlocked)
-    if (chapter.isUnlocked) {
+    // Verifica primeiro o backend (isUnlocked) e depois o estado local (isUnlocked da store)
+    const localUnlock = isUnlocked(work?.id || '', chapter.id);
+    
+    if (chapter.isUnlocked || localUnlock) {
         router.push(`/leitor/${work?.id}/${chapter.id}`);
         return;
     }
-    // Se bloqueado, abre compra
+    
     setSelectedChapter(chapter.id);
     setShowModal(true);
   };
 
+  // --- COMPRA COM ATUALIZAÇÃO OTIMISTA ---
   const confirmPurchase = async (method: 'premium' | 'lite') => {
-    if (!isAuthenticated) { router.push("/login"); return; }
+    if (!isAuthenticated) { 
+        router.push("/login"); 
+        return; 
+    }
+    
     if (selectedChapter && work) {
       setProcessingPurchase(true);
       try {
         const response = await api.post(`/chapters/${selectedChapter}/unlock`, { method });
         
         if (response.data.success) {
-          // Atualiza Saldos
-          if (response.data.newBalancePremium !== undefined) {
+          // 1. Atualiza Saldos (Visual)
+          if (method === 'premium' && response.data.newBalancePremium !== undefined) {
              useUserStore.setState({ patinhas: response.data.newBalancePremium });
           }
-          if (response.data.newBalanceLite !== undefined) {
+          if (method === 'lite' && response.data.newBalanceLite !== undefined) {
              setMyLiteBalance(response.data.newBalanceLite);
           }
 
+          // 2. ATUALIZAÇÃO OTIMISTA (Muda visualmente para desbloqueado agora)
+          const updatedChapters = work.chapters.map(ch => {
+            if (ch.id === selectedChapter) {
+                return { ...ch, isUnlocked: true };
+            }
+            return ch;
+          });
+          
+          setWork({ ...work, chapters: updatedChapters });
+          
+          // 3. Atualiza store global de unlocks
+          unlockChapter(work.id, selectedChapter, 0); 
+
           setShowModal(false);
           
-          // IMPORTANTE: Recarrega os dados da obra para atualizar o cadeado visualmente
-          // O Backend vai devolver o chapter com isUnlocked = true
-          await refreshData(); 
+          // 4. Redireciona
+          router.push(`/leitor/${work.id}/${selectedChapter}`);
           
-          // Opcional: Já redireciona direto
-          // router.push(`/leitor/${work.id}/${selectedChapter}`);
+          // 5. Atualiza em background
+          refreshData(); 
         }
       } catch (error: any) {
         alert(error.response?.data?.error || "Erro na compra");
@@ -175,8 +191,6 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
     { value: 'NENHUM', label: 'Sem Status' },
   ];
   const currentStatusLabel = statusOptions.find(s => s.value === myStatus)?.label || "Biblioteca";
-
-  // Encontra o capítulo alvo para mostrar o preço no modal
   const targetChapterInfo = work.chapters.find(c => c.id === selectedChapter);
 
   return (
@@ -229,13 +243,27 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
                     )}
                 </div>
                 <button onClick={handleFavorite} className={`p-3 rounded-xl border border-white/10 transition-all ${isFavorite ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-black/40 text-zinc-400 hover:text-white'}`}><Heart className={`w-6 h-6 ${isFavorite ? 'fill-current' : ''}`} /></button>
+                <button onClick={handleShare} className="p-3 rounded-xl border border-white/10 bg-black/40 text-zinc-400 hover:text-white transition-all relative">
+                    {copied ? <CheckCircle className="w-6 h-6 text-green-500" /> : <Share2 className="w-6 h-6" />}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
+                <span className="text-xs text-zinc-500 uppercase font-bold tracking-widest">Sua Nota:</span>
+                <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                        <button key={star} onClick={() => handleRate(star)} className="focus:outline-none transition-transform hover:scale-110">
+                            <Star className={`w-5 h-5 ${star <= myRating ? 'text-gato-amber fill-current' : 'text-zinc-700'}`} />
+                        </button>
+                    ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* LISTA DE CAPÍTULOS */}
+      {/* CONTEÚDO */}
       <div className="container mx-auto px-4 mt-8 md:mt-12 grid md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-12">
           <section>
@@ -249,22 +277,29 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
             </h3>
             <div className="space-y-2">
               {work.chapters.map((chapter) => {
-                // Aqui usamos a verdade do servidor (chapter.isUnlocked)
-                const isUnlocked = chapter.isUnlocked;
+                // CORREÇÃO: Renomeado para evitar conflito com a função isUnlocked
+                const hasAccess = chapter.isUnlocked || isUnlocked(work.id, chapter.id);
+                const isLocked = !chapter.isFree && !hasAccess;
                 
                 return (
-                  <div key={chapter.id} onClick={() => handleChapterClick(chapter)} className={`group flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${isUnlocked ? "bg-gato-amber/5 border-gato-amber/30 hover:bg-gato-amber/10" : "bg-white/5 border-white/5 hover:bg-white/10"}`}>
+                  <div key={chapter.id} onClick={() => handleChapterClick(chapter)} className={`group flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${!isLocked ? "bg-gato-amber/5 border-gato-amber/30 hover:bg-gato-amber/10" : "bg-white/5 border-white/5 hover:bg-white/10 opacity-90"}`}>
                     <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-full ${isUnlocked ? 'bg-gato-amber/20' : 'bg-black/40'}`}>
-                        {isUnlocked ? <Unlock className="w-4 h-4 text-gato-amber" /> : <Lock className="w-4 h-4 text-gato-muted" />}
+                      <div className={`p-2 rounded-full ${!isLocked ? 'bg-gato-amber/20' : 'bg-black/40'}`}>
+                        {!isLocked ? <Unlock className="w-4 h-4 text-gato-amber" /> : <Lock className="w-4 h-4 text-gato-muted" />}
                       </div>
                       <div>
-                        <h4 className={`font-bold text-sm ${isUnlocked ? 'text-gato-amber' : 'text-white'}`}>Capítulo {chapter.number} {chapter.title ? `- ${chapter.title}` : ''}</h4>
+                        <h4 className={`font-bold text-sm ${!isLocked ? 'text-gato-amber' : 'text-white'}`}>Capítulo {chapter.number} {chapter.title ? `- ${chapter.title}` : ''}</h4>
                         <span className="text-xs text-gato-muted">{new Date(chapter.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
                     <div className="text-xs font-bold">
-                      {isUnlocked ? <span className="text-gato-amber font-extrabold tracking-wider">LIBERADO</span> : <button className="flex items-center gap-1 bg-white/10 hover:bg-gato-purple hover:text-white px-3 py-1.5 rounded-full transition-colors text-gato-ghost">{chapter.price} 🐾</button>}
+                      {hasAccess ? (
+                         <span className="text-gato-amber font-extrabold tracking-wider">LIBERADO</span>
+                      ) : chapter.isFree ? (
+                         <span className="text-gato-green bg-gato-green/10 px-2 py-1 rounded">GRÁTIS</span>
+                      ) : (
+                         <button className="flex items-center gap-1 bg-white/10 hover:bg-gato-purple hover:text-white px-3 py-1.5 rounded-full transition-colors text-gato-ghost">{chapter.price} 🐾</button>
+                      )}
                     </div>
                   </div>
                 );
@@ -276,14 +311,27 @@ export default function MangaDetails({ params }: { params: Promise<{ id: string 
              <CommentSection workId={work.id} />
           </section>
         </div>
+
+        <div className="hidden md:block">
+           <div className="bg-gato-gray p-6 rounded-xl border border-white/5 sticky top-24 space-y-6">
+              <div>
+                <h4 className="font-bold text-white mb-4">Ficha Técnica</h4>
+                <ul className="space-y-3 text-sm text-gato-muted">
+                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Autor</span> <span className="text-white font-medium">{work.author}</span></li>
+                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Artista</span> <span className="text-white font-medium">{work.artist || '-'}</span></li>
+                  <li className="flex justify-between border-b border-white/5 pb-2"><span>Status</span> <span className="text-gato-purple font-medium">{work.status}</span></li>
+                </ul>
+              </div>
+           </div>
+        </div>
       </div>
 
-      {/* MODAL DE COMPRA */}
+      {/* MODAL */}
       <AnimatePresence>
         {showModal && targetChapterInfo && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !processingPurchase && setShowModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-gato-gray border border-white/10 w-full max-w-sm p-6 rounded-2xl shadow-2xl">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-gato-gray border border-white/10 w-full max-w-sm p-6 rounded-2xl shadow-2xl">
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gato-purple via-gato-amber to-gato-purple" />
                <h3 className="text-xl font-bold text-white text-center mb-2 mt-2">Desbloquear Capítulo {targetChapterInfo.number}?</h3>
                <p className="text-center text-gato-muted text-sm mb-6">Escolha como deseja acessar este conteúdo.</p>
