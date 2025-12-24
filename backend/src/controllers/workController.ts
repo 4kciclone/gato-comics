@@ -13,6 +13,9 @@ export class WorkController {
   // LISTAR OBRAS (Com Busca)
   async list(req: Request, res: Response) {
     try {
+      // Evita cache na listagem para refletir status novos rapidamente
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
       const { q } = req.query; 
 
       const whereClause: any = {};
@@ -41,6 +44,8 @@ export class WorkController {
   // OBTER DESTAQUE (Hero)
   async getFeatured(req: Request, res: Response) {
     try {
+      res.setHeader('Cache-Control', 'no-store'); // Sem cache
+
       const work = await prisma.work.findFirst({
         where: { status: 'ONGOING' },
         orderBy: { updatedAt: 'desc' },
@@ -55,18 +60,20 @@ export class WorkController {
   // RECOMENDAÇÕES (Inteligente)
   async getRecommendations(req: Request, res: Response) {
     try {
+      res.setHeader('Cache-Control', 'no-store');
+
       let userId = null;
 
-      // Soft Auth: Tenta ler o token mas não barra se falhar
+      // Soft Auth
       const authHeader = req.headers.authorization;
       if (authHeader) {
         try {
-          const token = authHeader.split(' ')[1];
+          const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
           if (token && token !== 'null') {
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
             userId = decoded.id;
           }
-        } catch (e) { /* Token inválido, segue como visitante */ }
+        } catch (e) { /* Token inválido */ }
       }
 
       let recommendedWorks: any[] = [];
@@ -119,12 +126,19 @@ export class WorkController {
     }
   }
 
-  // DETALHES DA OBRA (COM VERIFICAÇÃO DE DESBLOQUEIO)
+  // =========================================================================
+  // 3. DETALHES DA OBRA (COM CORREÇÃO DE CACHE E VERIFICAÇÃO DE UNLOCKS)
+  // =========================================================================
   async show(req: Request, res: Response) {
     const { id } = req.params;
     let userId: string | null = null;
 
-    // Extração de Token
+    // A. Desativar Cache do Navegador (CRUCIAL para atualizar após compra)
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    // B. Soft Auth: Identificar usuário
     const authHeader = req.headers.authorization;
     if (authHeader) {
       try {
@@ -133,10 +147,16 @@ export class WorkController {
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
             userId = decoded.id;
         }
-      } catch (e) { console.log("Token inválido show:", e); }
+      } catch (e: any) { 
+        console.log(`[WorkController] Token inválido: ${e.message}`);
+      }
     }
 
+    // DEBUG: Verifique isso no terminal da VPS
+    console.log(`[DEBUG] GET Work: ${id} | User: ${userId ? userId : 'VISITANTE'}`);
+
     try {
+      // C. Buscar a Obra
       const work = await prisma.work.findFirst({ 
         where: { OR: [{ id }, { slug: id }] }, 
         include: { 
@@ -151,18 +171,25 @@ export class WorkController {
       
       if (!work) return res.status(404).json({ error: 'Obra nao encontrada' });
 
-      // Mapa de Unlocks
+      // D. Mapa de Desbloqueios
       const unlockedMap: Record<string, boolean> = {};
 
       if (userId) {
-        // Busca TODOS os unlocks do usuário (Mais seguro que filtrar por lista de IDs complexa)
-        // Otimização: Seleciona apenas o chapterId e expiresAt
-        const allUnlocks = await prisma.unlock.findMany({
-            where: { userId: userId },
-            select: { chapterId: true, expiresAt: true }
+        // Busca unlocks para os capítulos desta obra específica
+        const chapterIds = work.chapters.map(c => c.id);
+        
+        const unlocks = await prisma.unlock.findMany({
+            where: {
+                userId: userId,
+                chapterId: { in: chapterIds }
+            },
+            select: { chapterId: true, expiresAt: true, type: true }
         });
 
-        allUnlocks.forEach(u => {
+        console.log(`[DEBUG] Unlocks encontrados: ${unlocks.length}`);
+
+        unlocks.forEach(u => {
+            // Regra: Permanente OU data futura
             const isValid = !u.expiresAt || new Date(u.expiresAt) > new Date();
             if (isValid) {
                 unlockedMap[u.chapterId] = true;
@@ -170,9 +197,9 @@ export class WorkController {
         });
       }
 
+      // E. Monta resposta injetando status
       const chaptersWithStatus = work.chapters.map(chapter => ({
           ...chapter,
-          // É desbloqueado se: Grátis OU Preço 0 OU Está no Mapa de Unlocks
           isUnlocked: chapter.isFree || (chapter.price === 0) || !!unlockedMap[chapter.id]
       }));
 
@@ -203,6 +230,7 @@ export class WorkController {
 
   async getRanking(req: Request, res: Response) {
     try {
+      res.setHeader('Cache-Control', 'no-store'); // Ranking sempre fresco
       const { period } = req.query;
 
       if (period === 'all') {
@@ -246,6 +274,7 @@ export class WorkController {
 
   async getUserInteraction(req: Request, res: Response) {
     try {
+      res.setHeader('Cache-Control', 'no-store');
       const userId = req.userId!;
       const { id } = req.params;
       const interaction = await prisma.userLibrary.findUnique({
